@@ -238,11 +238,9 @@
     overlay.style.left = '0';
     overlay.style.width = '100%';
     overlay.style.height = '100%';
-    overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
     overlay.style.pointerEvents = 'none';
     overlay.style.zIndex = '2147483639';
-    overlay.style.backdropFilter = 'grayscale(0.9) contrast(1.1) brightness(0.9)';
-    overlay.style.webkitBackdropFilter = 'grayscale(0.9) contrast(1.1) brightness(0.9)';
+    overlay.style.backgroundColor = 'transparent';
     document.body.appendChild(overlay);
     return overlay;
   }
@@ -250,26 +248,7 @@
   /**
    * Gets a consistent color for an element based on its index
    */
-  function getElementColor(index) {
-    // A set of visually distinct colors that work well on dark/light backgrounds
-    const colors = [
-      '#4E79A7', // Blue
-      '#F28E2B', // Orange
-      '#E15759', // Red
-      '#76B7B2', // Teal
-      '#59A14F', // Green
-      '#EDC948', // Yellow
-      '#B07AA1', // Purple
-      '#FF9DA7', // Pink
-      '#9C755F', // Brown
-      '#BAB0AC', // Gray
-    ];
-    return {
-      base: colors[index % colors.length],
-      highlight: colors[index % colors.length] + '4D', // 30% opacity
-      border: colors[index % colors.length] + 'CC' // 80% opacity
-    };
-  }
+
 
   /**
    * Highlights an element in the DOM and returns the index of the next element.
@@ -313,12 +292,38 @@
 
       if (!rects || rects.length === 0) return index; // Exit if no rects
 
-      // Get consistent colors for this element
-      const colors = getElementColor(index);
-      const baseColor = colors.base;
-      const backgroundColor = colors.highlight;
-      const borderColor = colors.border;
-      const highlightColor = `hsl(${(index * 137.5) % 360}, 100%, 50%)`; // More vibrant color
+      // Generate a color based on element's tag and class
+      const getColorKey = (element) => {
+        const tag = element.tagName.toLowerCase();
+        const className = element.className ? String(element.className).split(' ')[0] : '';
+        return `${tag}:${className}`;
+      };
+
+      const colors = [
+        "#FF0000", // Red
+        "#00AA00", // Green
+        "#0000FF", // Blue
+        "#FF8C00", // Dark Orange
+        "#800080", // Purple
+        "#008080", // Teal
+        "#FF69B4", // Pink
+        "#4B0082", // Indigo
+        "#FF4500", // Orange Red
+        "#2E8B57", // Sea Green
+        "#DC143C", // Crimson
+        "#4682B4", // Steel Blue
+      ];
+      
+      // Create a simple hash from the element's tag and class
+      const key = getColorKey(element);
+      let hash = 0;
+      for (let i = 0; i < key.length; i++) {
+        hash = (hash << 5) - hash + key.charCodeAt(i);
+        hash = hash & hash; // Convert to 32bit integer
+      }
+      const colorIndex = Math.abs(hash) % colors.length;
+      const baseColor = colors[colorIndex];
+      const backgroundColor = baseColor + "33"; // 20% opacity
 
       // Get iframe offset if necessary
       let iframeOffset = { x: 0, y: 0 };
@@ -337,15 +342,14 @@
 
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
-        overlay.style.border = `3px solid ${highlightColor}`;
-        overlay.style.backgroundColor = `${highlightColor}33`; // 20% opacity
+        overlay.style.border = `2px solid ${baseColor}`;
+        overlay.style.backgroundColor = backgroundColor;
         overlay.style.pointerEvents = "none";
         overlay.style.boxSizing = "border-box";
-        overlay.style.borderRadius = '6px';
-        overlay.style.boxShadow = `0 0 0 2px white, 0 0 0 4px ${highlightColor}`;
+        overlay.style.borderRadius = '4px';
+        overlay.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.3) inset';
         overlay.style.transition = 'all 0.2s ease';
         overlay.style.willChange = 'transform, opacity';
-        overlay.style.pointerEvents = 'none';
 
         const top = rect.top + iframeOffset.y;
         const left = rect.left + iframeOffset.x;
@@ -364,21 +368,19 @@
       label = document.createElement("div");
       label.className = "playwright-highlight-label";
       label.style.position = "fixed";
-      label.style.background = highlightColor;
-      label.style.color = 'white';
-      label.style.padding = '3px 8px';
-      label.style.borderRadius = '12px';
-      label.style.fontSize = `${Math.min(14, Math.max(10, firstRect.height / 3))}px`;
-      label.style.fontWeight = 'bold';
-      label.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.8)';
+      label.style.background = baseColor;
+      label.style.color = "white";
+      label.style.padding = "2px 6px";
+      label.style.borderRadius = "4px";
+      label.style.fontSize = `${Math.min(12, Math.max(8, firstRect.height / 2))}px`;
+      label.style.fontWeight = "bold";
+      label.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
       label.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      label.style.lineHeight = '1.2';
-      label.style.textAlign = 'center';
-      label.style.minWidth = '24px';
-      label.style.boxSizing = 'border-box';
+      label.style.lineHeight = "1.2";
+      label.style.textAlign = "center";
+      label.style.minWidth = "20px";
+      label.style.boxSizing = "border-box";
       label.style.transition = 'all 0.2s ease';
-      label.style.textShadow = '0 1px 2px rgba(0,0,0,0.3)';
-      label.style.border = '2px solid white';
       label.textContent = index;
 
       labelWidth = label.offsetWidth > 0 ? label.offsetWidth : labelWidth; // Update actual width if possible
