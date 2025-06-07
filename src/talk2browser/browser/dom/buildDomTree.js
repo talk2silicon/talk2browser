@@ -1382,6 +1382,7 @@
       attributes: {},
       xpath: getXPathTree(node, true),
       children: [],
+      text: node.textContent?.trim() || '',
     };
 
     // Get attributes for interactive elements or potential text containers

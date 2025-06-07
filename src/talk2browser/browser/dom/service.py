@@ -1,18 +1,21 @@
 """
 DOM Service for interacting with the page DOM using buildDomTree.js.
 """
+from dataclasses import dataclass, field
+import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, field, asdict
-import logging
+
 from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class DOMElement:
-    """Represents a DOM element with its properties."""
+    """Represents a DOM element with its properties and provides hashing for identification."""
+    
     def __init__(
         self,
         tag_name: str,
@@ -37,15 +40,51 @@ class DOMElement:
         self.is_top_element = is_top_element
         self.is_in_viewport = is_in_viewport
         self.highlight_index = highlight_index
-        self.text = text
-        self.bounds = bounds
+        self.text = (text or '').strip()
+        self.bounds = bounds or {}
         self.computed_style = computed_style or {}
+        self._element_hash: Optional[str] = None
         
     def __str__(self):
         return f"<DOMElement {self.tag_name} {self.xpath}>"
     
     def __repr__(self):
         return str(self)
+        
+    @property
+    def element_hash(self) -> str:
+        """Generate a stable hash for the element based on its properties."""
+        if self._element_hash is None:
+            # Create a unique identifier based on element's properties
+            hash_data = {
+                'tag': self.tag_name,
+                'xpath': self.xpath,
+                'text': self.text,
+                'classes': self.attributes.get('class', '').split(),
+                'type': self.attributes.get('type'),
+                'id': self.attributes.get('id'),
+                'name': self.attributes.get('name'),
+                'role': self.attributes.get('role'),
+                'aria-label': self.attributes.get('aria-label'),
+                'placeholder': self.attributes.get('placeholder'),
+            }
+            # Convert to JSON string and hash it
+            hash_str = json.dumps(hash_data, sort_keys=True)
+            self._element_hash = hashlib.md5(hash_str.encode('utf-8')).hexdigest()
+        return self._element_hash
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert element to a dictionary for serialization."""
+        return {
+            'hash': self.element_hash,
+            'tag_name': self.tag_name,
+            'xpath': self.xpath,
+            'text': self.text,
+            'is_visible': self.is_visible,
+            'is_interactive': self.is_interactive,
+            'attributes': self.attributes,
+            'bounds': self.bounds,
+        }
 
     @classmethod
     def from_dict(cls, data: dict) -> 'DOMElement':
@@ -89,21 +128,134 @@ class DOMService:
     
     def __init__(self, page: Page):
         self.page = page
-        self.xpath_cache = {}
-        self._script_content = self._load_script()
+        self._dom_tree = None
+        self._interactive_elements: List[DOMElement] = []
+        self._highlighted_elements = set()
+        self._element_map: Dict[str, DOMElement] = {}
         
-    def _load_script(self) -> str:
-        """Load the buildDomTree.js script."""
-        script_path = Path(__file__).parent / 'buildDomTree.js'
-        return script_path.read_text(encoding='utf-8')
-    
+        # Load the buildDomTree.js script
+        script_path = Path(__file__).parent / "buildDomTree.js"
+        with open(script_path, "r", encoding='utf-8') as f:
+            self._build_dom_tree_js = f.read()
+            
+    async def get_interactive_elements(self, highlight: bool = False) -> List[Dict[str, Any]]:
+        """Get all interactive elements on the page with their hashes.
+        
+        Args:
+            highlight: Whether to highlight the elements
+            
+        Returns:
+            List of element dictionaries with hashes
+        """
+        elements = []
+        dom_tree = await self._get_dom_tree(highlight_elements=highlight)
+        
+        for elem_id, elem_data in dom_tree['map'].items():
+            if elem_data.get('isInteractive'):
+                element = DOMElement(
+                    tag_name=elem_data.get('tagName', '').lower(),
+                    text=elem_data.get('text', '').strip(),
+                    xpath=elem_data.get('xpath', ''),
+                    attributes=elem_data.get('attributes', {}),
+                    is_visible=elem_data.get('isVisible', False),
+                    is_interactive=True,
+                    is_in_viewport=elem_data.get('isInViewport', False),
+                    bounds=elem_data.get('bounds'),
+                    highlight_index=elem_data.get('highlightIndex'),
+                )
+                self._element_map[element.element_hash] = element
+                elements.append(element.to_dict())
+                
+        self._interactive_elements = elements
+        return elements
+        
+    async def find_element_by_hash(self, element_hash: str) -> Optional[DOMElement]:
+        """Find an interactive element by its hash.
+        
+        Args:
+            element_hash: The hash of the element to find
+            
+        Returns:
+            The matching DOMElement or None if not found
+        """
+        if not self._interactive_elements:
+            await self.get_interactive_elements()
+            
+        return self._element_map.get(element_hash)
+        
+    async def get_interactive_elements(self, highlight: bool = False) -> List[DOMElement]:
+        """Get all interactive elements on the page with their hashes.
+        
+        Args:
+            highlight: Whether to highlight the elements
+            
+        Returns:
+            List of interactive DOMElement objects
+        """
+        # Clear previous state
+        logger.debug("Clearing previous element state")
+        self._element_map = {}
+        self._interactive_elements = []
+        
+        # Get fresh DOM tree
+        logger.debug("Getting fresh DOM tree")
+        dom_tree = await self.get_dom_tree(highlight_elements=highlight)
+        
+        # Process interactive elements
+        logger.debug("Processing interactive elements")
+        for elem_id, elem_data in dom_tree['map'].items():
+            if elem_data.get('isInteractive'):
+                element = DOMElement(
+                    tag_name=elem_data.get('tagName', '').lower(),
+                    text=elem_data.get('text', '').strip(),
+                    xpath=elem_data.get('xpath', ''),
+                    attributes=elem_data.get('attributes', {}),
+                    is_visible=elem_data.get('isVisible', False),
+                    is_interactive=True,
+                    is_in_viewport=elem_data.get('isInViewport', False),
+                    bounds=elem_data.get('bounds'),
+                    highlight_index=elem_data.get('highlightIndex'),
+                )
+                logger.debug(f"Adding element to map: {element.tag_name} - {element.element_hash}")
+                self._element_map[element.element_hash] = element
+                self._interactive_elements.append(element)
+                
+        logger.debug(f"Found {len(self._interactive_elements)} elements, map size: {len(self._element_map)}")
+        return self._interactive_elements
+    async def click_element_by_hash(self, element_hash: str) -> bool:
+        """Click an element by its hash.
+        
+        Args:
+            element_hash: The hash of the element to click
+            
+        Returns:
+            bool: True if click was successful, False otherwise
+        """
+        # Get element from current map without refreshing
+        logger.debug(f"Looking for element with hash {element_hash} in map of size {len(self._element_map)}")
+        element = self._element_map.get(element_hash)
+        if not element:
+            logger.warning("Element with hash %s not found in current map", element_hash)
+            return False
+            
+        try:
+            # Use locator for better dynamic element handling
+            logger.debug(f"Found element {element.tag_name}, using xpath: {element.xpath}")
+            locator = self.page.locator(f'xpath={element.xpath}')
+            await locator.wait_for(state='visible', timeout=5000)
+            await locator.click()
+            return True
+        except Exception as e:
+            logger.error(f"Error clicking element: {e}")
+            return False
+            
     async def get_dom_tree(self, highlight_elements: bool = False, focus_element: int = -1, viewport_expansion: int = 0) -> Dict:
         """Get the complete DOM tree with interactive elements highlighted.
         
         Args:
             highlight_elements: Whether to highlight interactive elements
-            focus_element: Index of element to focus (-1 for none)
-            viewport_expansion: Number of pixels to expand the viewport by
+            focus_element: Index of the element to highlight (-1 for none)
+            viewport_expansion: Number of pixels to expand the viewport by when checking visibility
             
         Returns:
             Dictionary containing the DOM tree and element map
@@ -135,7 +287,7 @@ class DOMService:
         }
         
         try:
-            result = await self.page.evaluate(self._script_content, args)
+            result = await self.page.evaluate(self._build_dom_tree_js, args)
             
             if 'error' in result:
                 raise ValueError(f"Error getting DOM tree: {result['error']}")
@@ -148,42 +300,7 @@ class DOMService:
         
         return result
     
-    async def get_interactive_elements(self, highlight: bool = False) -> List[DOMElement]:
-        """Get all interactive elements on the page.
-        
-        Args:
-            highlight: Whether to highlight the elements
-            
-        Returns:
-            List of DOMElement objects
-        """
-        dom_tree = await self.get_dom_tree(highlight_elements=highlight)
-        elements = []
-        
-        for elem_id, elem_data in dom_tree['map'].items():
-            if elem_data.get('isInteractive'):
-                try:
-                    element = DOMElement(
-                        tag_name=elem_data.get('tagName', '').lower(),
-                        text=elem_data.get('text', ''),
-                        xpath=elem_data.get('xpath', ''),
-                        bounds=elem_data.get('bounds'),
-                        is_interactive=True,
-                        highlight_index=elem_data.get('highlightIndex'),
-                        node_type=elem_data.get('nodeType', 1)  # Default to ELEMENT_NODE
-                    )
-                    elements.append(element)
-                except Exception as e:
-                    logger.warning(f"Error creating DOMElement: {e}")
-                    continue
-                    
-        return elements
-        """Recursively find all interactive elements."""
-        if element.is_interactive:
-            result.append(element)
-        
-        for child in element.children:
-            self._find_interactive_elements(child, result)
+
     
     async def _highlight_elements(self, elements: List[DOMElement]):
         """Highlight the given elements on the page."""
