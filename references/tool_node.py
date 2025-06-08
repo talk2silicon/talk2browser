@@ -162,4 +162,4 @@ class BrowserAgent:
         
         # Add page state to the user's message
         enhanced_messages = list(messages)
-        if
+        

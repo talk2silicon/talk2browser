@@ -1,11 +1,20 @@
-(
-  args = {
-    doHighlightElements: true,
-    focusHighlightIndex: -1,
-    viewportExpansion: 0,
-    debugMode: false,
-  }
-) => {
+/**
+ * Build DOM Tree Function
+ * This function builds a simplified DOM tree from the current page
+ * and returns a map of node IDs to node data, along with the root node ID.
+ */
+(function() {
+  // Return early if buildDomTree is already defined
+  if (window.buildDomTree) return window.buildDomTree;
+
+  window.buildDomTree = function(
+    args = {
+      doHighlightElements: true,
+      focusHighlightIndex: -1,
+      viewportExpansion: 0,
+      debugMode: false
+    }
+  ) {
   const { doHighlightElements, focusHighlightIndex, viewportExpansion, debugMode } = args;
   let highlightIndex = 0; // Reset highlight index
 
@@ -213,9 +222,6 @@
   const ID = { current: 0 };
 
   const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
-  
-  // Clean up any existing highlights first
-  cleanupHighlights();
 
   // Add a WeakMap cache for XPath strings
   const xpathCache = new WeakMap();
@@ -229,29 +235,6 @@
     },
     { rootMargin: `${viewportExpansion}px` }
   );
-
-  /**
-   * Creates a semi-transparent overlay to gray out the page
-   */
-  function createPageOverlay() {
-    const overlay = document.createElement('div');
-    overlay.id = 'playwright-page-overlay';
-    overlay.style.position = 'fixed';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100%';
-    overlay.style.height = '100%';
-    overlay.style.zIndex = '2147483646';  // Just below highlights
-    overlay.style.pointerEvents = 'none';
-    overlay.style.backgroundColor = 'transparent';
-    document.body.appendChild(overlay);
-    return overlay;
-  }
-
-  /**
-   * Gets a consistent color for an element based on its index
-   */
-
 
   /**
    * Highlights an element in the DOM and returns the index of the next element.
@@ -280,7 +263,7 @@
         container.style.left = "0";
         container.style.width = "100%";
         container.style.height = "100%";
-        container.style.zIndex = "2147483647";  // Maximum z-index
+        container.style.zIndex = "2147483640";
         container.style.backgroundColor = 'transparent';
         document.body.appendChild(container);
       }
@@ -290,38 +273,24 @@
 
       if (!rects || rects.length === 0) return index; // Exit if no rects
 
-      // Generate a color based on element's tag and class
-      const getColorKey = (element) => {
-        const tag = element.tagName.toLowerCase();
-        const className = element.className ? String(element.className).split(' ')[0] : '';
-        return `${tag}:${className}`;
-      };
-
+      // Generate a color based on the index
       const colors = [
-        "#FF0000", // Red
-        "#00AA00", // Green
-        "#0000FF", // Blue
-        "#FF8C00", // Dark Orange
-        "#800080", // Purple
-        "#008080", // Teal
-        "#FF69B4", // Pink
-        "#4B0082", // Indigo
-        "#FF4500", // Orange Red
-        "#2E8B57", // Sea Green
-        "#DC143C", // Crimson
-        "#4682B4", // Steel Blue
+        "#FF0000",
+        "#00FF00",
+        "#0000FF",
+        "#FFA500",
+        "#800080",
+        "#008080",
+        "#FF69B4",
+        "#4B0082",
+        "#FF4500",
+        "#2E8B57",
+        "#DC143C",
+        "#4682B4",
       ];
-      
-      // Create a simple hash from the element's tag and class
-      const key = getColorKey(element);
-      let hash = 0;
-      for (let i = 0; i < key.length; i++) {
-        hash = (hash << 5) - hash + key.charCodeAt(i);
-        hash = hash & hash; // Convert to 32bit integer
-      }
-      const colorIndex = Math.abs(hash) % colors.length;
+      const colorIndex = index % colors.length;
       const baseColor = colors[colorIndex];
-      const backgroundColor = baseColor + "33"; // 20% opacity
+      const backgroundColor = baseColor + "1A"; // 10% opacity version of the color
 
       // Get iframe offset if necessary
       let iframeOffset = { x: 0, y: 0 };
@@ -336,7 +305,7 @@
 
       // Create highlight overlays for each client rect
       for (const rect of rects) {
-        if (rect.width === 0 || rect.height === 0 || rect.top < 0 || rect.left < 0) continue; // Skip invalid rects
+        if (rect.width === 0 || rect.height === 0) continue; // Skip empty rects
 
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
@@ -344,10 +313,6 @@
         overlay.style.backgroundColor = backgroundColor;
         overlay.style.pointerEvents = "none";
         overlay.style.boxSizing = "border-box";
-        overlay.style.borderRadius = '4px';
-        overlay.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.3) inset';
-        overlay.style.transition = 'all 0.2s ease';
-        overlay.style.willChange = 'transform, opacity';
 
         const top = rect.top + iframeOffset.y;
         const left = rect.left + iframeOffset.x;
@@ -368,17 +333,9 @@
       label.style.position = "fixed";
       label.style.background = baseColor;
       label.style.color = "white";
-      label.style.padding = "2px 6px";
+      label.style.padding = "1px 4px";
       label.style.borderRadius = "4px";
       label.style.fontSize = `${Math.min(12, Math.max(8, firstRect.height / 2))}px`;
-      label.style.fontWeight = "bold";
-      label.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
-      label.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      label.style.lineHeight = "1.2";
-      label.style.textAlign = "center";
-      label.style.minWidth = "20px";
-      label.style.boxSizing = "border-box";
-      label.style.transition = 'all 0.2s ease';
       label.textContent = index;
 
       labelWidth = label.offsetWidth > 0 ? label.offsetWidth : labelWidth; // Update actual width if possible
@@ -497,11 +454,6 @@
       // Then add fragment to container in one operation
       container.appendChild(fragment);
       
-      // Add page overlay after highlights
-      if (!document.getElementById('playwright-page-overlay')) {
-        createPageOverlay();
-      }
-      
       return index + 1;
     } finally {
       popTiming('highlighting');
@@ -515,40 +467,14 @@
 
   // Add this function to perform cleanup when needed
   function cleanupHighlights() {
-    try {
-      // Remove existing highlight container
-      const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
-      if (container) {
-        // Remove all child elements first
-        while (container.firstChild) {
-          container.firstChild.remove();
-        }
-        container.remove();
-      }
-      
-      // Remove page overlay
-      const overlay = document.getElementById('playwright-page-overlay');
-      if (overlay) overlay.remove();
-      
-      // Clean up any registered event listeners
-      if (window._highlightCleanupFunctions) {
-        window._highlightCleanupFunctions.forEach(cleanup => {
-          if (typeof cleanup === 'function') {
-            try {
-              cleanup();
-            } catch (e) {
-              // Swallow errors during cleanup
-            }
-          }
-        });
-        window._highlightCleanupFunctions = [];
-      }
-      
-      // Clear any lingering highlight elements
-      document.querySelectorAll('.playwright-highlight-label').forEach(el => el.remove());
-    } catch (e) {
-      // Swallow any errors during cleanup
+    if (window._highlightCleanupFunctions && window._highlightCleanupFunctions.length) {
+      window._highlightCleanupFunctions.forEach(fn => fn());
+      window._highlightCleanupFunctions = [];
     }
+    
+    // Also remove the container
+    const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
+    if (container) container.remove();
   }
 
   function getElementPosition(currentElement) {
@@ -1399,7 +1325,6 @@
       attributes: {},
       xpath: getXPathTree(node, true),
       children: [],
-      text: node.textContent?.trim() || '',
     };
 
     // Get attributes for interactive elements or potential text containers
@@ -1552,7 +1477,15 @@
     }
   }
 
-  return debugMode ?
-    { rootId, map: DOM_HASH_MAP, perfMetrics: PERF_METRICS } :
-    { rootId, map: DOM_HASH_MAP };
-};
+    return debugMode ?
+      { rootId, map: DOM_HASH_MAP, perfMetrics: PERF_METRICS } :
+      { rootId, map: DOM_HASH_MAP };
+  };
+
+  // Export for CommonJS (Node) environments
+  try {
+    module.exports = window.buildDomTree;
+  } catch (e) {}
+
+  return window.buildDomTree;
+})();

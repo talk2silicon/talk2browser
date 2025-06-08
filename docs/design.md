@@ -1,5 +1,125 @@
 # Browser Automation Agent with LangGraph
 
+## 🎯 DOM Tree Highlighting Design
+
+### Overview
+The DOM tree highlighting system is a critical component that helps visualize and interact with elements on the page. It consists of several key components working together:
+
+1. **DOM Tree Construction**
+   - Recursively builds a tree representation of the page's DOM
+   - Handles special cases like iframes, shadow DOM, and rich text editors
+   - Caches element properties for performance
+
+2. **Element Analysis**
+   - `isElementVisible()`: Checks if an element is visible on the page
+   - `isInteractiveElement()`: Determines if an element is interactive (clickable, typeable)
+   - `isTopElement()`: Verifies if an element is the topmost at its position
+   - `isInExpandedViewport()`: Checks if element is within the expanded viewport
+
+3. **Highlighting System**
+   - Creates a high z-index overlay container
+   - Draws highlight boxes around interactive elements
+   - Shows element numbers for reference
+   - Handles cleanup of highlights
+
+### Key Features
+
+1. **Performance Optimization**
+   - Caches bounding rectangles
+   - Caches computed styles
+   - Caches client rects
+   - Uses WeakMap to prevent memory leaks
+
+2. **Robust Element Detection**
+   - Handles common interactive tags (a, button, input, etc.)
+   - Supports ARIA roles and attributes
+   - Detects click handlers and cursor styles
+   - Considers contenteditable elements
+
+3. **Visual Feedback**
+   - Hot pink highlight borders for visibility
+   - Numbered labels for element reference
+   - Handles scrolling and fixed positioning
+   - Cleans up highlights properly
+
+### Implementation Details
+
+1. **buildDomTree Function**
+   ```javascript
+   function buildDomTree(args) {
+     const { doHighlightElements, focusHighlightIndex, viewportExpansion } = args;
+     // Initialize caches and observers
+     // Build DOM tree recursively
+     // Handle cleanup
+     return { rootId, map: DOM_HASH_MAP };
+   }
+   ```
+
+2. **Element Visibility**
+   ```javascript
+   function isElementVisible(element) {
+     return (
+       element.offsetWidth > 0 &&
+       element.offsetHeight > 0 &&
+       style.visibility !== "hidden" &&
+       style.display !== "none" &&
+       style.opacity !== "0"
+     );
+   }
+   ```
+
+3. **Highlighting**
+   ```javascript
+   function highlightElement(element, index) {
+     const position = getElementPosition(element);
+     // Create highlight overlay
+     // Add number label
+     return index + 1;
+   }
+   ```
+
+### Integration with Python
+
+1. **DOMService Class**
+   ```python
+   class DOMService:
+       def __init__(self, page: Page):
+           self.page = page
+           self._build_dom_tree_js = load_script("buildDomTree.js")
+
+       async def get_dom_tree(self, highlight_elements: bool = False):
+           return await self.page.evaluate(self._build_dom_tree_js, args)
+   ```
+
+2. **Element Interaction**
+   ```python
+   async def click_element(self, element_hash: str) -> bool:
+       element = self._element_map.get(element_hash)
+       if not element:
+           return False
+       await element.click()
+       return True
+   ```
+
+### Design Decisions
+
+1. **No Icon Integration**
+   - Keep highlighting system focused on core functionality
+   - Avoid complexity of icon management
+   - Use simple numbered labels instead
+
+2. **Performance First**
+   - Extensive caching of element properties
+   - Minimal DOM operations
+   - Efficient cleanup
+
+3. **Robust Element Detection**
+   - Multiple methods to detect interactive elements
+   - Careful handling of edge cases
+   - Proper cleanup of resources
+
+
+
 ## 🧭 Design Principles
 
 1. **Simplicity First**

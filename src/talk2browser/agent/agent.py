@@ -15,6 +15,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
 from ..browser import PlaywrightClient
+from ..browser.dom.service import DOMService
 from ..tools.registry import ToolRegistry
 
 # Configure logging
@@ -80,6 +81,7 @@ class BrowserAgent:
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
         self.client = None
+        self.dom_service = None
         self.tool_registry = ToolRegistry()
         self.graph = self._create_agent_graph()
     
@@ -88,11 +90,15 @@ class BrowserAgent:
         if self.client is None:
             self.client = PlaywrightClient(headless=self.headless)
             await self.client.start()
+            self.dom_service = DOMService(self.client.page)
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         if self.client is not None:
+            if self.dom_service:
+                await self.dom_service.clear_highlights()
+                self.dom_service = None
             await self.client.close()
             self.client = None
     

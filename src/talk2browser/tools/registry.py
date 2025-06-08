@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, Tuple, Union
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from playwright.async_api import Page, ElementHandle
+from ..browser.dom.service import DOMService
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class ToolRegistry:
         self._register_base_tools()
 
     def _register_base_tools(self) -> None:
-        """Dynamically register Playwright Page and ElementHandle methods as tools."""
+        """Dynamically register Playwright Page, ElementHandle, and DOM service methods as tools."""
         # Register Page methods
         page_methods = self._get_playwright_methods(Page)
         for name, method in page_methods.items():
@@ -37,6 +38,29 @@ class ToolRegistry:
                 method=method,
                 prefix="element_"
             )
+            
+        # Register DOM service methods
+        self.register_tool(
+            name="get_interactive_elements",
+            func=self._get_interactive_elements,
+            description="Get all interactive elements on the page with optional highlighting",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "highlight": {
+                        "type": "boolean",
+                        "description": "Whether to highlight the interactive elements"
+                    }
+                }
+            }
+        )
+        
+        self.register_tool(
+            name="clear_highlights",
+            func=self._clear_highlights,
+            description="Clear any existing element highlights from the page",
+            parameters={"type": "object", "properties": {}}
+        )
     
     def _get_playwright_methods(self, cls: Type) -> Dict[str, Callable]:
         """Get all public async methods from a Playwright class."""
@@ -381,6 +405,29 @@ class ToolRegistry:
             
         return all_tools[:top_k]
 
+    async def _get_interactive_elements(self, _page=None, highlight: bool = False) -> List[Dict]:
+        """Get all interactive elements on the page with optional highlighting.
+        
+        Args:
+            _page: Playwright page object
+            highlight: Whether to highlight the elements
+            
+        Returns:
+            List of interactive elements
+        """
+        dom_service = DOMService(_page)
+        elements = await dom_service.get_interactive_elements(highlight=highlight)
+        return [e.to_dict() for e in elements]
+    
+    async def _clear_highlights(self, _page=None) -> None:
+        """Clear any existing element highlights from the page.
+        
+        Args:
+            _page: Playwright page object
+        """
+        dom_service = DOMService(_page)
+        await dom_service.clear_highlights()
+    
     async def execute_tool(self, name: str, _page=None, **kwargs) -> Any:
         """Execute a tool by name with the given arguments.
         
@@ -412,6 +459,15 @@ class ToolRegistry:
                 # Convert string locator to Playwright Locator object
                 if isinstance(kwargs.get("locator"), str):
                     kwargs["locator"] = _page.locator(kwargs["locator"])
+            
+            # Special handling for DOM service tools
+            if name in ["get_interactive_elements", "clear_highlights"]:
+                from ..browser.dom.service import DOMService
+                dom_service = DOMService(_page)
+                if name == "get_interactive_elements":
+                    return await dom_service.get_interactive_elements(**kwargs)
+                elif name == "clear_highlights":
+                    return await dom_service.clear_highlights()
             
             # Execute the tool and await if it's a coroutine
             result = tool["function"](**kwargs)
