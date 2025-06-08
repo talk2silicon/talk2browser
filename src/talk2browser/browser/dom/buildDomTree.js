@@ -213,6 +213,9 @@
   const ID = { current: 0 };
 
   const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
+  
+  // Clean up any existing highlights first
+  cleanupHighlights();
 
   // Add a WeakMap cache for XPath strings
   const xpathCache = new WeakMap();
@@ -238,8 +241,8 @@
     overlay.style.left = '0';
     overlay.style.width = '100%';
     overlay.style.height = '100%';
+    overlay.style.zIndex = '2147483646';  // Just below highlights
     overlay.style.pointerEvents = 'none';
-    overlay.style.zIndex = '2147483639';
     overlay.style.backgroundColor = 'transparent';
     document.body.appendChild(overlay);
     return overlay;
@@ -277,14 +280,9 @@
         container.style.left = "0";
         container.style.width = "100%";
         container.style.height = "100%";
-        container.style.zIndex = "2147483640";
+        container.style.zIndex = "2147483647";  // Maximum z-index
         container.style.backgroundColor = 'transparent';
         document.body.appendChild(container);
-        
-        // Add page overlay when first creating the container
-        if (!document.getElementById('playwright-page-overlay')) {
-          createPageOverlay();
-        }
       }
 
       // Get element client rects
@@ -338,7 +336,7 @@
 
       // Create highlight overlays for each client rect
       for (const rect of rects) {
-        if (rect.width === 0 || rect.height === 0) continue; // Skip empty rects
+        if (rect.width === 0 || rect.height === 0 || rect.top < 0 || rect.left < 0) continue; // Skip invalid rects
 
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
@@ -499,6 +497,11 @@
       // Then add fragment to container in one operation
       container.appendChild(fragment);
       
+      // Add page overlay after highlights
+      if (!document.getElementById('playwright-page-overlay')) {
+        createPageOverlay();
+      }
+      
       return index + 1;
     } finally {
       popTiming('highlighting');
@@ -512,25 +515,39 @@
 
   // Add this function to perform cleanup when needed
   function cleanupHighlights() {
-    if (window._highlightCleanupFunctions && window._highlightCleanupFunctions.length) {
-      window._highlightCleanupFunctions.forEach(fn => fn());
-      window._highlightCleanupFunctions = [];
-    }
-    
-    // Also remove the container
-    const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
-    if (container) container.remove();
-
-    // Remove page overlay if it exists
-    const overlay = document.getElementById('playwright-page-overlay');
-    if (overlay) {
-      overlay.remove();
-    }
-
-    // Clear any existing timeouts
-    if (cleanupTimeouts.size > 0) {
-      cleanupTimeouts.forEach(clearTimeout);
-      cleanupTimeouts.clear();
+    try {
+      // Remove existing highlight container
+      const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
+      if (container) {
+        // Remove all child elements first
+        while (container.firstChild) {
+          container.firstChild.remove();
+        }
+        container.remove();
+      }
+      
+      // Remove page overlay
+      const overlay = document.getElementById('playwright-page-overlay');
+      if (overlay) overlay.remove();
+      
+      // Clean up any registered event listeners
+      if (window._highlightCleanupFunctions) {
+        window._highlightCleanupFunctions.forEach(cleanup => {
+          if (typeof cleanup === 'function') {
+            try {
+              cleanup();
+            } catch (e) {
+              // Swallow errors during cleanup
+            }
+          }
+        });
+        window._highlightCleanupFunctions = [];
+      }
+      
+      // Clear any lingering highlight elements
+      document.querySelectorAll('.playwright-highlight-label').forEach(el => el.remove());
+    } catch (e) {
+      // Swallow any errors during cleanup
     }
   }
 

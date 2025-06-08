@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, TypedDict, Annotated, Sequence
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -120,7 +120,7 @@ class BrowserAgent:
         return workflow.compile()
     
     async def _chatbot(self, state: AgentState):
-        """Process messages with LLM and determine next step."""
+        """Process messages with LLM and determine next step with full context."""
         messages = state["messages"]
         
         try:
@@ -128,9 +128,60 @@ class BrowserAgent:
             page_state = await self.client.get_page_state()
             state["current_url"] = page_state.get("url")
             
-            # Get available tools filtered by user input
-            user_input = next((msg.content for msg in messages if isinstance(msg, HumanMessage)), "")
-            tools = self.tool_registry.list_tools(user_input=user_input, top_k=5)
+            # Get user input from messages
+            user_input = next((msg.content for msg in messages[::-1] 
+                             if isinstance(msg, HumanMessage)), "")
+            
+            # Get available tools filtered by both user input and page state
+            tools = self.tool_registry.list_tools(
+                user_input=user_input,
+                page_state=page_state,
+                top_k=5
+            )
+            
+            # Format interactive elements for context
+            elements_context = self._format_elements(
+                page_state.get('interactive_elements', [])
+            )
+            
+            # Format conversation history
+            conversation_history = self._format_history(messages)
+            
+            # Build enhanced system message with full context
+            system_msg = SystemMessage(
+                content=f"""{SYSTEM_PROMPT}
+                
+                ## Current Page Context
+                URL: {page_state.get('url', 'No page loaded')}
+                Title: {page_state.get('title', '')}
+                
+                ## Interactive Elements
+                {elements_context}
+                
+                ## Conversation History
+                {conversation_history}
+                
+                ## Available Tools (most relevant first)
+                {self._format_tools(tools)}
+                """.strip()
+            )
+            
+            # Prepare conversation with updated context
+            conversation = [system_msg] + [
+                msg for msg in messages 
+                if not isinstance(msg, SystemMessage)
+            ]
+            
+            # Add tool results if any
+            if len(messages) > 1 and any(isinstance(msg, ToolMessage) for msg in messages):
+                # Get the most recent tool result
+                tool_msg = next((msg for msg in messages[::-1] 
+                                if isinstance(msg, ToolMessage)), None)
+                if tool_msg:
+                    conversation.append(HumanMessage(
+                        content=f"Tool execution result: {tool_msg.content}\n\n"
+                                "What should we do next?"
+                    ))
             
             # Prepare tools in Anthropic format
             anthropic_tools = [{
@@ -138,31 +189,59 @@ class BrowserAgent:
                 "function": {
                     "name": tool["name"],
                     "description": tool["description"],
-                    "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+                    "parameters": tool.get("parameters", {
+                        "type": "object", 
+                        "properties": {}
+                    })
                 }
             } for tool in tools]
             
-            # Add system prompt if not present
-            if not any(isinstance(msg, SystemMessage) for msg in messages):
-                system_msg = SystemMessage(
-                    content=f"""{SYSTEM_PROMPT}
-                    
-                    Current page: {page_state.get('url', 'No page loaded')}
-                    Title: {page_state.get('title', '')}
-                    """.strip()
-                )
-                messages = [system_msg] + list(messages)
-            
-            # Bind tools to the model
+            # Bind tools and invoke model with full context
             model_with_tools = self.llm.bind_tools(anthropic_tools)
+            response = await model_with_tools.ainvoke(conversation)
             
-            # Invoke the model and return updated state
-            response = await model_with_tools.ainvoke(messages)
-            return {"messages": messages + [response]}
+            return {"messages": conversation + [response]}
             
         except Exception as e:
-            logger.error(f"Error in chatbot: {e}")
-            return {"messages": messages + [HumanMessage(content=f"Error processing your request: {str(e)}")]}
+            logger.error(f"Error in chatbot: {e}", exc_info=True)
+            return {"messages": messages + [
+                HumanMessage(content=f"Error: {str(e)}")
+            ]}
+            
+    def _format_elements(self, elements: List[Dict]) -> str:
+        """Format interactive elements for context."""
+        if not elements:
+            return "No interactive elements found"
+        
+        formatted = []
+        for i, elem in enumerate(elements[:5], 1):
+            desc = elem.get('description', 'No description')
+            elem_type = elem.get('type', 'element')
+            formatted.append(f"{i}. [{elem_type}] {desc}")
+        
+        if len(elements) > 5:
+            formatted.append(f"... and {len(elements) - 5} more")
+        
+        return "\n".join(formatted)
+    
+    def _format_history(self, messages: List[BaseMessage]) -> str:
+        """Format conversation history."""
+        history = []
+        for msg in messages[-3:]:  # Last 3 messages
+            if isinstance(msg, HumanMessage):
+                history.append(f"User: {msg.content}")
+            elif isinstance(msg, ToolMessage):
+                history.append(f"Tool: {msg.tool_name} -> {msg.content}")
+            elif isinstance(msg, AIMessage):
+                history.append(f"Assistant: {msg.content}")
+        return "\n".join(history) if history else "No previous actions"
+    
+    def _format_tools(self, tools: List[Dict]) -> str:
+        """Format tools list for context."""
+        return "\n".join([
+            f"- {tool['name']}: {tool['description']}" 
+            for tool in tools
+        ])
     
     def _route_tools(self, state: AgentState):
         """Route to tools node if tool calls are present, otherwise end."""

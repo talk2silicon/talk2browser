@@ -95,6 +95,10 @@ class ToolRegistry:
                     param_info["type"] = "string"
                 elif 'float' in type_str:
                     param_info["type"] = "number"
+                elif 'locator' in type_str.lower():
+                    # Handle Playwright Locator objects
+                    param_info["type"] = "object"
+                    param_info["description"] = "A Playwright Locator object"
             
             # Skip internal parameters (prefixed with _)
             if param.name.startswith('_'):
@@ -322,15 +326,21 @@ class ToolRegistry:
             logger.warning(f"Error matching tools: {e}")
             return [{"tool": t, "score": 0.0} for t in tools[:top_k]]  # Fallback to first N tools
 
-    def list_tools(self, user_input: Optional[str] = None, top_k: int = 5) -> List[Dict]:
-        """List available tools, optionally filtered by relevance to user input.
+    def list_tools(
+        self, 
+        user_input: Optional[str] = None, 
+        page_state: Optional[Dict] = None,
+        top_k: int = 5
+    ) -> List[Dict]:
+        """List available tools, filtered by relevance to user input and page state.
         
         Args:
             user_input: Optional input text to filter tools by relevance
-            top_k: Maximum number of tools to return (when filtering)
+            page_state: Optional current page state with URL and interactive elements
+            top_k: Maximum number of tools to return
             
         Returns:
-            List of tool definitions
+            List of tool definitions sorted by relevance
         """
         all_tools = [
             {
@@ -341,18 +351,35 @@ class ToolRegistry:
             for name, tool in self._tools.items()
         ]
         
-        logger.info(f"Total available tools: {len(all_tools)}")
-        
-        if user_input and len(all_tools) > top_k:
-            # If we have many tools and user input, filter by relevance
-            logger.info(f"Filtering tools based on user input: {user_input}")
-            matched = self.match_tools(user_input, all_tools, top_k=top_k)
-            filtered_tools = [m["tool"] for m in matched]
-            logger.info(f"Selected {len(filtered_tools)} most relevant tools")
-            return filtered_tools
+        # Build context-aware query
+        query_parts = []
+        if user_input:
+            query_parts.append(user_input)
             
-        logger.info(f"Using all {len(all_tools)} tools (no filtering applied)")
-        return all_tools
+        if page_state:
+            # Add URL context
+            if url := page_state.get('url'):
+                query_parts.append(f"url: {url}")
+                
+            # Add interactive elements context (limit to 5)
+            if elements := page_state.get('interactive_elements', [])[:5]:
+                element_descs = []
+                for elem in elements:
+                    elem_type = elem.get('type', 'element')
+                    elem_desc = elem.get('description', '')
+                    if elem_desc:
+                        element_descs.append(f"{elem_type}: {elem_desc}")
+                if element_descs:
+                    query_parts.append("elements: " + ", ".join(element_descs))
+        
+        # Create combined query
+        query = " ".join(query_parts)
+        
+        if query:
+            matched = self.match_tools(query, all_tools, top_k=top_k)
+            return [m["tool"] for m in matched]
+            
+        return all_tools[:top_k]
 
     async def execute_tool(self, name: str, _page=None, **kwargs) -> Any:
         """Execute a tool by name with the given arguments.
@@ -379,6 +406,12 @@ class ToolRegistry:
         try:
             # Add page to tool arguments with correct name
             kwargs["_page"] = _page
+            
+            # Handle locator parameters
+            if "locator" in str(inspect.signature(tool["function"])).lower():
+                # Convert string locator to Playwright Locator object
+                if isinstance(kwargs.get("locator"), str):
+                    kwargs["locator"] = _page.locator(kwargs["locator"])
             
             # Execute the tool and await if it's a coroutine
             result = tool["function"](**kwargs)

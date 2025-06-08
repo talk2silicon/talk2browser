@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Element Selection Demo</title>
+    <style>
+        /* Main page styling */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        /* Website content area */
+        .website {
+            flex: 1;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 20px;
+            position: relative;
+        }
+
+        /* Element highlights */
+        .element-highlight {
+            position: absolute;
+            border: 2px solid #4285f4;
+            background: rgba(66, 133, 244, 0.1);
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .element-badge {
+            position: absolute;
+            background: #4285f4;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            transform: translate(-12px, -12px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1001;
+        }
+
+        /* Info panel */
+        .info-panel {
+            width: 300px;
+            background: white;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .element-card {
+            background: #f6f8fa;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #4285f4;
+        }
+
+        .element-type {
+            font-size: 12px;
+            color: #6a737d;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .element-description {
+            font-weight: 500;
+            margin: 5px 0;
+        }
+
+        .element-hint {
+            font-size: 12px;
+            color: #6a737d;
+            margin-top: 4px;
+        }
+
+        /* Mock website elements */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e1e4e8;
+            margin-bottom: 20px;
+        }
+
+        .search-box {
+            padding: 8px 12px;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            width: 300px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #d1d5da;
+            background: #f6f8fa;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #2da44e;
+            color: white;
+            border-color: #2c974b;
+        }
+    </style>
+</head>
+<body>
+    <!-- Mock Website -->
+    <div class="website" id="website">
+        <div class="header">
+            <div>GitHub</div>
+            <div>
+                <input type="text" class="search-box" placeholder="Search or jump to...">
+                <button class="btn">Sign in</button>
+                <button class="btn btn-primary">Sign up</button>
+            </div>
+        </div>
+        <h1>Welcome to GitHub</h1>
+        <p>Where the world builds software</p>
+        
+        <!-- Highlight overlays (added by JavaScript) -->
+        <div class="element-highlight" style="left: 200px; top: 60px; width: 300px; height: 40px;"></div>
+        <div class="element-badge" style="left: 200px; top: 60px;">1</div>
+        
+        <div class="element-highlight" style="left: 700px; top: 60px; width: 80px; height: 40px;"></div>
+        <div class="element-badge" style="left: 700px; top: 60px;">2</div>
+        
+        <div class="element-highlight" style="left: 800px; top: 60px; width: 80px; height: 40px;"></div>
+        <div class="element-badge" style="left: 800px; top: 60px;">3</div>
+    </div>
+
+    <!-- Info Panel -->
+    <div class="info-panel">
+        <h3>Interactive Elements</h3>
+        
+        <div class="element-card">
+            <div class="element-type">Search Box</div>
+            <div class="element-description">Search GitHub</div>
+            <div class="element-hint">Type to search repositories, users, or issues</div>
+        </div>
+        
+        <div class="element-card">
+            <div class="element-type">Button</div>
+            <div class="element-description">Sign in</div>
+            <div class="element-hint">Click to log in to your account</div>
+        </div>
+        
+        <div class="element-card">
+            <div class="element-type">Button (Primary)</div>
+            <div class="element-description">Sign up</div>
+            <div class="element-hint">Create a new GitHub account</div>
+        </div>
+
+        <div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #e1e4e8;">
+            <div style="font-size: 12px; color: #6a737d; margin-bottom: 8px;">Click a number or element to select it</div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn" style="flex: 1;">Click Selected</button>
+                <button class="btn" style="flex: 1;">View Details</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // This would be populated by buildDomTree.js
+        document.addEventListener('click', (e) => {
+            const badge = e.target.closest('.element-badge');
+            if (badge) {
+                const number = badge.textContent;
+                alert(`Selected element #${number}`);
+            }
+        });
+    </script>
+</body>
+</html>
