@@ -7,6 +7,10 @@
   // Return early if buildDomTree is already defined
   if (window.buildDomTree) return window.buildDomTree;
 
+  // Initialize ID counter and node map at outer scope
+  const ID = { current: 0 };
+  const DOM_HASH_MAP = {};
+
   window.buildDomTree = function(
     args = {
       doHighlightElements: true,
@@ -16,6 +20,10 @@
     }
   ) {
   const { doHighlightElements, focusHighlightIndex, viewportExpansion, debugMode } = args;
+  // Reset ID counter for each call
+  ID.current = 0;
+  // Clear node map for each call
+  Object.keys(DOM_HASH_MAP).forEach(key => delete DOM_HASH_MAP[key]);
   let highlightIndex = 0; // Reset highlight index
 
   // Add timing stack to handle recursion
