@@ -1,4 +1,9 @@
-(
+/**
+ * Build DOM Tree Function
+ * This function builds a simplified DOM tree from the current page
+ * and returns a map of node IDs to node data, along with the root node ID.
+ */
+window.buildDomTree = (
   args = {
     doHighlightElements: true,
     focusHighlightIndex: -1,
@@ -7,6 +12,11 @@
   }
 ) => {
   const { doHighlightElements, focusHighlightIndex, viewportExpansion, debugMode } = args;
+  let highlightIndex = 0; // Reset highlight index
+
+  // Initialize state
+  const ID = { current: 0 };
+  const DOM_HASH_MAP = {};
   let highlightIndex = 0; // Reset highlight index
 
   // Add timing stack to handle recursion
