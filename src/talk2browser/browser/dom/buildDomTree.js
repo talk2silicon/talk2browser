@@ -17,7 +17,6 @@ window.buildDomTree = (
   // Initialize state
   const ID = { current: 0 };
   const DOM_HASH_MAP = {};
-  let highlightIndex = 0; // Reset highlight index
 
   // Add timing stack to handle recursion
   const TIMING_STACK = {
@@ -212,15 +211,6 @@ window.buildDomTree = (
     }
     return rects;
   }
-
-  /**
-   * Hash map of DOM nodes indexed by their highlight index.
-   *
-   * @type {Object<string, any>}
-   */
-  const DOM_HASH_MAP = {};
-
-  const ID = { current: 0 };
 
   const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
 

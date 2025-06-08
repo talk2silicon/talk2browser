@@ -1,4 +1,5 @@
 """Playwright client for browser automation."""
+import logging
 from typing import Any, Dict, List, Optional
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
@@ -47,18 +48,27 @@ class PlaywrightClient:
             return {}
             
         # Import here to avoid circular imports
-        from ..browser.element_utils import find_interactive_elements
+        from ..browser.dom.service import DOMService
         
-        # Get basic page info
         state = {
             "url": self.page.url,
             "title": await self.page.title(),
             "screenshot": await self.page.screenshot(type="jpeg", quality=70),
         }
         
-        # Get interactive elements if page is available
+        # Get interactive elements with highlighting
         try:
-            state["interactive_elements"] = await find_interactive_elements(self.page)
+            dom_service = DOMService(self.page)
+            elements = await dom_service.get_interactive_elements(highlight=True)
+            state["interactive_elements"] = [
+                {
+                    "tag": el.tag_name,
+                    "text": el.text,
+                    "hash": el.hash,
+                    "attributes": el.attributes,
+                }
+                for el in elements
+            ]
         except Exception as e:
             logging.warning(f"Could not get interactive elements: {e}")
             state["interactive_elements"] = []
