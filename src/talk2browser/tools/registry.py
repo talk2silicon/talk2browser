@@ -2,10 +2,18 @@
 import inspect
 import logging
 import asyncio
+import json
+import hashlib
+import tempfile
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type, Tuple, Union
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from playwright.async_api import Page, ElementHandle
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from playwright.async_api import Page, ElementHandle
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +21,27 @@ logger = logging.getLogger(__name__)
 class ToolRegistry:
     """Registry for managing browser automation tools."""
 
-    def __init__(self):
-        """Initialize the tool registry."""
+    def __init__(self, llm=None):
+        """Initialize the tool registry.
+        
+        Args:
+            llm: Optional LLM instance to use for script generation
+        """
         self._tools: Dict[str, Dict] = {}
+        self._recording = []
+        self._llm = llm
         self._register_base_tools()
+        
+    @property
+    def recording(self):
+        """Get the current recording of tool executions."""
+        if not hasattr(self, '_recording'):
+            self._recording = []
+        return self._recording
+        
+    def clear_recording(self):
+        """Clear the current recording."""
+        self._recording.clear()
 
     def _register_base_tools(self) -> None:
         """Dynamically register Playwright Page and ElementHandle methods as tools."""
@@ -303,11 +328,12 @@ class ToolRegistry:
         if not tools or not user_input.strip():
             return []
             
-        tool_texts = self._get_tool_texts(tools)
-        
-        # Initialize and fit the vectorizer
-        vectorizer = TfidfVectorizer()
         try:
+            # Get text representation of tools
+            tool_texts = self._get_tool_texts(tools)
+            
+            # Initialize and fit the vectorizer
+            vectorizer = TfidfVectorizer()
             tool_vectors = vectorizer.fit_transform(tool_texts)
             user_vector = vectorizer.transform([user_input])
             
@@ -343,8 +369,8 @@ class ToolRegistry:
         
         logger.info(f"Total available tools: {len(all_tools)}")
         
-        if user_input and len(all_tools) > top_k:
-            # If we have many tools and user input, filter by relevance
+        if user_input:
+            # Filter tools based on relevance to user input
             logger.info(f"Filtering tools based on user input: {user_input}")
             matched = self.match_tools(user_input, all_tools, top_k=top_k)
             filtered_tools = [m["tool"] for m in matched]
@@ -377,7 +403,26 @@ class ToolRegistry:
         tool = self._tools[name]
         
         try:
-            # Add page to tool arguments with correct name
+            # Format the command for recording
+            cmd_args = []
+            for k, v in kwargs.items():
+                if k != '_page':
+                    if isinstance(v, str):
+                        cmd_args.append(f"{k}='{v}'")
+                    else:
+                        cmd_args.append(f"{k}={v}")
+            
+            # Record the command
+            command = f"await page.{name}({', '.join(cmd_args)})"
+            logger.debug(f"Recording command: {command}")
+            self.recording.append({
+                'tool': name,
+                'args': kwargs,
+                'command': command,
+                'timestamp': asyncio.get_event_loop().time()
+            })
+            
+            # Add page to tool arguments
             kwargs["_page"] = _page
             
             # Execute the tool and await if it's a coroutine
@@ -389,4 +434,125 @@ class ToolRegistry:
             
         except Exception as e:
             logger.error(f"Error executing tool {name}: {e}", exc_info=True)
+            raise
+        
+    async def generate_playwright_script(
+        self, 
+        output_path: str = "generated_script.py",
+        llm=None
+    ) -> str:
+        """Generate a Playwright script from recorded actions using LLM.
+        
+        Args:
+            output_path: Path to save the generated script
+            llm: Optional LLM instance to use (will use instance from __init__ if not provided)
+            
+        Returns:
+            Path to the generated script
+        """
+        if not self.recording:
+            raise ValueError("No recorded actions found")
+            
+        # Use provided LLM or instance from __init__
+        llm = llm or self._llm
+        if llm is None:
+            raise ValueError("No LLM instance provided for script generation")
+            
+        try:
+            # Format actions for the prompt
+            formatted_actions = []
+            for i, action in enumerate(self.recording, 1):
+                formatted_actions.append(
+                    f"{i}. {action['command']}"
+                )
+            
+            # Create the prompt with clear instructions for clean output
+            prompt = ChatPromptTemplate.from_template("""You are an expert at writing Playwright scripts. 
+            Convert the following recorded actions into a clean, maintainable Playwright script.
+
+            IMPORTANT: Only output the raw Python code, without any markdown formatting, explanations, or additional text.
+            The output should be a complete, runnable Python script that can be executed directly.
+
+            Guidelines:
+            1. Add proper imports and setup code
+            2. Add comments to explain the purpose of each action
+            3. Include proper error handling
+            4. Add appropriate waits where necessary
+            5. Use async/await pattern
+            6. Add type hints for better IDE support
+            7. Include a main() function with proper cleanup
+            8. Do not include any markdown formatting (```python or ```)
+            9. Do not include any explanations or additional text outside the script
+
+            Here are the recorded Playwright commands:
+            {actions}
+
+            Generate ONLY the Python code, with no additional text or formatting:""")
+            
+            # Create the chain and generate script
+            chain = prompt | llm | StrOutputParser()
+            script = await chain.ainvoke({"actions": "\n".join(formatted_actions)})
+            
+            # Clean up the script
+            script = script.strip()
+            
+            # Remove markdown code block markers if present
+            if script.startswith('```python'):
+                script = script[9:]
+            elif script.startswith('```'):
+                script = script[3:]
+                
+            if script.endswith('```'):
+                script = script[:-3]
+                
+            # Remove any remaining markdown explanations
+            script = script.split('Explanation:')[0].strip()
+            
+            # Ensure the script ends with proper newline
+            script = script.rstrip() + '\n'
+                
+            # Save the script
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(script, encoding='utf-8')
+            
+            # Clear recording after successful generation
+            self.clear_recording()
+            
+            return str(output_path.absolute())
+            
+        except ImportError:
+            # Fall back to the script generator if langchain is not available
+            # Save recording to a temporary file
+            with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as tmp:
+                json.dump(self._recording, tmp, indent=2)
+                tmp_path = tmp.name
+            
+            try:
+                # Run the script generator
+                script_path = Path(__file__).parent.parent / "scripts" / "generate_playwright_script.py"
+                if not script_path.exists():
+                    raise FileNotFoundError("Script generator not found")
+                
+                result = subprocess.run(
+                    [sys.executable, str(script_path), tmp_path, "-o", output_path],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if result.returncode != 0:
+                    raise RuntimeError(f"Failed to generate script: {result.stderr}")
+                
+                print(f"Script generated at {output_path}")
+                return output_path
+                
+            finally:
+                # Clean up temporary file
+                try:
+                    Path(tmp_path).unlink()
+                except:
+                    pass
+        
+        except Exception as e:
+            logger.error(f"Failed to generate Playwright script: {e}")
             raise

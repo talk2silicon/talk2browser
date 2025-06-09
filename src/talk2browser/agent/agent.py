@@ -21,37 +21,18 @@ from ..tools.registry import ToolRegistry
 logger = logging.getLogger(__name__)
 
 # System prompt template
-SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
+SYSTEM_PROMPT = """You are a browser automation assistant that executes web tasks using Playwright.
 
-## Core Capabilities:
-- Web navigation (URLs, links, buttons, forms)
-- Form filling and submission
-- Content extraction and summarization
-- Multi-step task execution
+Guidelines:
+1. Navigate directly to URLs with page.goto
+2. Use page.locator() for element selection
+3. Verify element existence before interactions
+4. Handle dynamic content and loading states
+5. Add appropriate waits between actions
+6. Report errors clearly and suggest fixes
 
-## Guidelines:
-1. When a full URL is provided, use page_goto to navigate directly to that URL
-2. For search queries, prefer using DuckDuckGo (https://duckduckgo.com)
-3. Always check the current page state before taking actions
-4. Be specific in your searches to get the most relevant results
-5. If a task fails, try to understand why and take appropriate action
-6. When typing text, ensure the target element is visible and interactable
-7. For multi-step tasks, complete one step at a time and verify success before proceeding
-8. When asked to find and interact with elements, first analyze the page structure
-9. If an action doesn't work as expected, try alternative approaches
-10. Always verify the result of each action before proceeding to the next step
+Focus on completing tasks efficiently and reliably."""
 
-## Multi-step Navigation:
-- Clearly identify each step before executing it
-- Verify the success of each step before proceeding
-- If a step fails, analyze why and try an alternative approach
-- Maintain context between steps to ensure continuity
-
-## Error Handling:
-- If an element is not found, check for iframes, modals, or dynamic content
-- If a page doesn't load, try refreshing or going back and retrying
-- If stuck, analyze the page structure and try a different approach
-"""
 
 class AgentState(TypedDict):
     """State for the browser agent.
@@ -66,21 +47,21 @@ class AgentState(TypedDict):
 class BrowserAgent:
     """Agent for browser automation using LangGraph and Playwright."""
     
-    def __init__(self, headless: bool = False, llm: Optional[BaseChatModel] = None):
+    def __init__(self, llm: Optional[BaseChatModel] = None, headless: bool = False):
         """Initialize the browser agent.
         
         Args:
-            headless: Whether to run browser in headless mode
             llm: The language model to use (default: ChatAnthropic with claude-3-opus-20240229)
+            headless: Whether to run browser in headless mode
         """
         self.headless = headless
         self.llm = llm or ChatAnthropic(
-            model=os.getenv("CLAUDE_MODEL", "claude-3-opus-20240229"),
-            temperature=0.0,
+            model="claude-3-opus-20240229",
+            temperature=0.1,
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
         self.client = None
-        self.tool_registry = ToolRegistry()
+        self.tool_registry = ToolRegistry(llm=self.llm)
         self.graph = self._create_agent_graph()
     
     async def __aenter__(self):
@@ -128,20 +109,6 @@ class BrowserAgent:
             page_state = await self.client.get_page_state()
             state["current_url"] = page_state.get("url")
             
-            # Get available tools filtered by user input
-            user_input = next((msg.content for msg in messages if isinstance(msg, HumanMessage)), "")
-            tools = self.tool_registry.list_tools(user_input=user_input, top_k=5)
-            
-            # Prepare tools in Anthropic format
-            anthropic_tools = [{
-                "type": "function",
-                "function": {
-                    "name": tool["name"],
-                    "description": tool["description"],
-                    "parameters": tool.get("parameters", {"type": "object", "properties": {}})
-                }
-            } for tool in tools]
-            
             # Add system prompt if not present
             if not any(isinstance(msg, SystemMessage) for msg in messages):
                 system_msg = SystemMessage(
@@ -153,16 +120,38 @@ class BrowserAgent:
                 )
                 messages = [system_msg] + list(messages)
             
+            # Get available tools
+            tools = self.tool_registry.list_tools()
+            
+            # Prepare tools in Anthropic format
+            anthropic_tools = [{
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool.get("parameters", {"type": "object", "properties": {}})
+                }
+            } for tool in tools]
+            
             # Bind tools to the model
             model_with_tools = self.llm.bind_tools(anthropic_tools)
             
-            # Invoke the model and return updated state
+            # Invoke the model and get response
             response = await model_with_tools.ainvoke(messages)
+            
+            # Check for tool calls
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                logger.info(f"Found {len(response.tool_calls)} tool calls")
+                state["next"] = "tools"
+            else:
+                state["next"] = END
+                
             return {"messages": messages + [response]}
             
         except Exception as e:
             logger.error(f"Error in chatbot: {e}")
-            return {"messages": messages + [HumanMessage(content=f"Error processing your request: {str(e)}")]}
+            state["next"] = END
+            return {"messages": messages + [HumanMessage(content=f"Error: {str(e)}")]}
     
     def _route_tools(self, state: AgentState):
         """Route to tools node if tool calls are present, otherwise end."""
@@ -229,35 +218,44 @@ class BrowserAgent:
         # Return updated state
         return {"messages": messages}
 
-    async def run(self, prompt: str) -> str:
-        """Run the agent with the given prompt.
+    async def run(
+        self, 
+        task: str, 
+        output_script: Optional[str] = None,
+        **kwargs
+    ) -> str:
+        """Run the agent with the given task.
         
         Args:
-            prompt: User's natural language prompt
+            task: The task to perform
+            output_script: Optional path to save the generated Playwright script
+            **kwargs: Additional arguments to pass to the agent
             
         Returns:
-            Response from the agent
+            The agent's response
         """
-        logger.info(f"Starting agent with prompt: {prompt}")
-        
-        # Initialize the browser if not already done
-        if not self.client:
-            self.client = PlaywrightClient(headless=self.headless)
-            await self.client.start()
-        
+        if not self.client or not self.client.page:
+            raise RuntimeError("Agent is not initialized. Use 'async with' context manager.")
+            
         try:
-            # Create initial state with the user's prompt
-            state = {
-                "messages": [HumanMessage(content=prompt)],
-                "current_url": None,
-                "next": "chatbot"
-            }
+            # Run the agent
+            result = await self.graph.ainvoke({
+                "messages": [("user", task)],
+                "page": self.client.page,
+                "tool_registry": self.tool_registry,
+                **kwargs
+            })
             
-            logger.info(f"Starting agent with URL: {state['current_url'] or 'about:blank'}")
-            
-            # Run the graph
-            logger.info("Executing agent graph...")
-            result = await self.graph.ainvoke(state)
+            # Generate Playwright script if requested
+            if output_script and hasattr(self.tool_registry, 'generate_playwright_script'):
+                try:
+                    script_path = await self.tool_registry.generate_playwright_script(
+                        output_path=output_script,
+                        llm=self.llm
+                    )
+                    print(f"\nGenerated Playwright script: {script_path}")
+                except Exception as e:
+                    logger.error(f"Failed to generate Playwright script: {e}")
             
             logger.info("Agent graph execution completed")
             

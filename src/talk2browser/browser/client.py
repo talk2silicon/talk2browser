@@ -64,7 +64,7 @@ class PlaywrightClient:
                 {
                     "tag": el.tag_name,
                     "text": el.text,
-                    "hash": el.hash,
+                    "hash": el.element_hash,
                     "attributes": el.attributes,
                 }
                 for el in elements
