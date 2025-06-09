@@ -476,18 +476,22 @@ class ToolRegistry:
             Guidelines:
             1. Add proper imports and setup code
             2. Add comments to explain the purpose of each action
-            3. Include proper error handling
-            4. Add appropriate waits where necessary
+            3. Include proper error handling with descriptive error messages
+            4. Add human-like delays between actions using `asyncio.sleep()` for better visibility
             5. Use async/await pattern
             6. Add type hints for better IDE support
             7. Include a main() function with proper cleanup
-            8. Do not include any markdown formatting (```python or ```)
-            9. Do not include any explanations or additional text outside the script
+            8. Set browser to run in non-headless mode (visible) by default
+            9. Add a small delay (0.5-1 second) between actions for better visibility
+            10. Do not include any markdown formatting (```python or ```)
+            11. Do not include any explanations or additional text outside the script
 
             Here are the recorded Playwright commands:
             {actions}
 
-            Generate ONLY the Python code, with no additional text or formatting:""")
+            Generate ONLY the Python code, with no additional text or formatting.
+            Make sure to include `headless=False` when launching the browser.
+            Add `asyncio.sleep(0.5)` between actions for better visibility.""")
             
             # Create the chain and generate script
             chain = prompt | llm | StrOutputParser()
