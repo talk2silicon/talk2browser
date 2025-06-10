@@ -1,5 +1,5 @@
 """Tools module for talk2browser."""
 
-from .registry import ToolRegistry
+from .browser_tools import navigate, click, set_page
 
-__all__ = ["ToolRegistry"]
+__all__ = ["navigate", "click", "set_page"]

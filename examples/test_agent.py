@@ -4,7 +4,8 @@ import logging
 import os
 from dotenv import load_dotenv
 
-from talk2browser.agent.agent import BrowserAgent
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -12,13 +13,16 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+from talk2browser.agent.agent import BrowserAgent
+
 async def main():
     """Test the BrowserAgent with a multi-step navigation task."""
-    # Load environment variables
-    load_dotenv()
-    
     # Configure more detailed logging
     logging.getLogger("talk2browser").setLevel(logging.INFO)
+    
+    # Check for required API key
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise ValueError("ANTHROPIC_API_KEY environment variable is required")
     
     try:
         # Create and run the agent

@@ -3,4 +3,5 @@ langgraph>=0.0.1
 langchain-anthropic>=0.0.1
 langchain-core>=0.0.1
 python-dotenv>=1.0.0
+sentence-transformers>=2.2.2
 scikit-learn>=1.0.0

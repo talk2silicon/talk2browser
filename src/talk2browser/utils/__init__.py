@@ -1,3 +1,5 @@
 """Utility functions for talk2browser."""
 
-__all__ = []
+from .tool_filter import filter_tools
+
+__all__ = ['filter_tools']
