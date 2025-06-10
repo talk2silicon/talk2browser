@@ -1,4 +1,7 @@
-"""Test script for the BrowserAgent."""
+"""Test script for the BrowserAgent with Sauce Demo login example."""
+import logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 import asyncio
 import logging
 import os
@@ -16,7 +19,7 @@ logging.basicConfig(
 from talk2browser.agent.agent import BrowserAgent
 
 async def main():
-    """Test the BrowserAgent with a multi-step navigation task."""
+    """Test the BrowserAgent with a Sauce Demo login flow."""
     # Configure more detailed logging
     logging.getLogger("talk2browser").setLevel(logging.INFO)
     
@@ -27,49 +30,17 @@ async def main():
     try:
         # Create and run the agent
         async with BrowserAgent(headless=False) as agent:
-            # First level: Navigate to the LangGraph GitHub repository
+            # Step 1: Navigate to Sauce Demo
             print("\n" + "="*80)
-            print("STEP 1: Navigate to LangGraph GitHub Repository")
+            print("STEP 1: Navigate to Sauce Demo")
             print("="*80)
             response = await agent.run(
-                "Navigate to the LangGraph GitHub repository at https://github.com/langchain-ai/langgraph"
+                "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce"
             )
             print("\nAgent response:")
             print(response)
             
-            # Add a small delay to ensure page is fully loaded
-            await asyncio.sleep(2)
-            
-            # Second level: Find and click on the Issues tab
-            print("\n" + "="*80)
-            print("STEP 2: Navigate to Issues Section")
-            print("="*80)
-            response = await agent.run(
-                "Find and click on the 'Issues' tab to view the open issues. "
-                "Make sure to wait for the page to fully load after clicking."
-            )
-            print("\nAgent response:")
-            print(response)
-            
-            # Add a small delay to ensure issues are loaded
-            await asyncio.sleep(3)
-            
-            # Third level: Interact with the issues page
-            print("\n" + "="*80)
-            print("STEP 3: Analyze First Open Issue")
-            print("="*80)
-            response = await agent.run(
-                "Find the first open issue in the list. Extract and summarize the following:\n"
-                "1. Issue title\n"
-                "2. Issue number\n"
-                "3. First comment or description (first 100 characters)"
-            )
-            print("\nAgent response:")
-            print(response)
-            
-            # Final status
-            print("\n" + "="*80)
-            print("MULTI-STEP NAVIGATION TEST COMPLETED SUCCESSFULLY!")
+            print("SAUCE DEMO LOGIN TEST COMPLETED!")
             print("="*80)
             
     except Exception as e:
