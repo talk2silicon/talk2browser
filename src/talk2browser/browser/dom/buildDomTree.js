@@ -26,6 +26,20 @@ window.buildDomTree = (
     current: null
   };
 
+  // Highlights multiple elements with optional focus index
+  function highlightElements(elements, focusIndex = null) {
+    elements.forEach((el, idx) => {
+      try {
+        el.style.outline = (focusIndex !== null && idx === focusIndex)
+          ? "3px solid red"
+          : "2px solid yellow";
+      } catch (e) {
+        // Ignore elements that can't be styled
+      }
+    });
+  }
+  window.highlightElements = highlightElements;
+
   function pushTiming(type) {
     TIMING_STACK[type] = TIMING_STACK[type] || [];
     TIMING_STACK[type].push(performance.now());

@@ -371,107 +371,34 @@ class DOMService:
 
     
     async def _highlight_elements(self, elements: List[DOMElement]):
-        """Highlight the given elements on the page."""
+        """Highlight the given elements on the page using the global JS function from buildDomTree.js."""
+        import logging
+        logger = logging.getLogger(__name__)
         if not elements:
+            logger.debug("No elements to highlight.")
             return
-            
-        # Create a simple highlight overlay
-        highlight_script = """
-        function highlightElements(elements) {
-            // Remove existing highlights
-            const container = document.getElementById('talk2browser-highlights');
-            if (container) {
-                container.remove();
+
+        # Prepare data for JS: you may need to adjust structure to match expected input
+        elements_data = [
+            {
+                'xpath': elem.xpath,
+                'tag_name': elem.tag_name,
+                'highlight_index': i
             }
-            
-            // Create container
-            const newContainer = document.createElement('div');
-            newContainer.id = 'talk2browser-highlights';
-            newContainer.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 0;
-                height: 0;
-                z-index: 2147483647;
-                pointer-events: none;
-            `;
-            document.body.appendChild(newContainer);
-            
-            // Color map for different element types
-            const colors = {
-                'a': '#4ECDC4',      // Teal for links
-                'button': '#FF6B6B',  // Red for buttons
-                'input': '#45B7D1',   // Blue for inputs
-                'select': '#96CEB4',  // Green for selects
-                'default': '#D4A373'  // Tan for others
-            };
-            
-            // Add highlights
-            elements.forEach((elem, index) => {
-                try {
-                    const element = document.evaluate(
-                        elem.xpath,
-                        document,
-                        null,
-                        XPathResult.FIRST_ORDERED_NODE_TYPE,
-                        null
-                    ).singleNodeValue;
-                    
-                    if (element) {
-                        const rect = element.getBoundingClientRect();
-                        const highlight = document.createElement('div');
-                        const color = colors[elem.tag_name] || colors.default;
-                        
-                        highlight.className = 'talk2browser-highlight';
-                        highlight.style.cssText = `
-                            position: absolute;
-                            left: ${rect.left + window.scrollX}px;
-                            top: ${rect.top + window.scrollY}px;
-                            width: ${rect.width}px;
-                            height: ${rect.height}px;
-                            background-color: ${color}33;
-                            border: 2px solid ${color};
-                            pointer-events: none;
-                            box-sizing: border-box;
-                        `;
-                        
-                        // Add label
-                        const label = document.createElement('div');
-                        label.textContent = index + 1;
-                        label.style.cssText = `
-                            position: absolute;
-                            top: -20px;
-                            left: 0;
-                            background-color: ${color};
-                            color: white;
-                            font-size: 12px;
-                            padding: 2px 5px;
-                            border-radius: 3px;
-                            font-family: Arial, sans-serif;
-                        `;
-                        
-                        highlight.appendChild(label);
-                        newContainer.appendChild(highlight);
-                    }
-                } catch (e) {
-                    console.error('Error highlighting element:', e);
-                }
-            });
-        }
-        """
-        
-        # Call the highlight function
-        elements_data = [{
-            'xpath': elem.xpath,
-            'tag_name': elem.tag_name,
-            'highlight_index': i
-        } for i, elem in enumerate(elements)]
-        
-        await self.page.evaluate(f"""
-            {highlight_script}
-            highlightElements({json.dumps(elements_data)});
-        """)
+            for i, elem in enumerate(elements)
+        ]
+
+        logger.debug(f"Calling window.highlightElements with {len(elements_data)} elements.")
+        try:
+            await self.page.evaluate(
+                "window.highlightElements(arguments[0], arguments[1]);",
+                elements_data,
+                None  # or pass focus index if needed
+            )
+            logger.debug("Successfully called window.highlightElements.")
+        except Exception as e:
+            logger.error(f"Error calling window.highlightElements: {e}", exc_info=True)
+
     
     async def clear_highlights(self):
         """Clear any existing element highlights."""

@@ -10,7 +10,7 @@ from typing import Annotated, Sequence, TypedDict, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_anthropic import ChatAnthropic
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
@@ -52,28 +52,37 @@ TOOLS = [
 ]
 
 # System prompt template
-SYSTEM_PROMPT = """You are BrowserAgent, a browser automation AI. Use the provided tools to interact with the web page. Always use the provided interactive element context to reference elements by their #hash. Never call a tool to list elements; this information is always included for you in your context after every action.
+SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
 
-You must never ask for CSS selectors or XPaths. You must always use the provided #hash for any element interaction. If you do not see a #hash for an element, ask the user to reload the interactive element list.
+## Core Capabilities:
+- Web navigation (URLs, links, buttons, forms)
+- Form filling and submission
+- Content extraction and summarization
+- Multi-step task execution
 
-Guidelines:
-1. Interact with elements using their hashes (e.g., #abc123)
-2. Always verify element visibility and interactivity
-3. Handle dynamic content and loading states
-4. Add appropriate waits between actions
-5. Report errors clearly and suggest fixes
+## Guidelines:
+1. When a full URL is provided, use page_goto to navigate directly to that URL
+2. For search queries, prefer using DuckDuckGo (https://duckduckgo.com)
+3. Always check the current page state before taking actions
+4. Be specific in your searches to get the most relevant results
+5. If a task fails, try to understand why and take appropriate action
+6. When typing text, ensure the target element is visible and interactable
+7. For multi-step tasks, complete one step at a time and verify success before proceeding
+8. When asked to find and interact with elements, first analyze the page structure
+9. If an action doesn't work as expected, try alternative approaches
+10. Always verify the result of each action before proceeding to the next step
 
-Available element attributes in the format:
-#hash - tag_name [id=id_value] [name=name_value] [text=preview...] [hidden] [non-interactive]
+## Multi-step Navigation:
+- Clearly identify each step before executing it
+- Verify the success of each step before proceeding
+- If a step fails, analyze why and try an alternative approach
+- Maintain context between steps to ensure continuity
 
-Example usage:
-- To click an element: click("#abc123")
-- To fill a field: fill("#def456", "some text")
-- To get text: get_text("#abc123")
-
-
-
-Focus on completing tasks efficiently and reliably."""
+## Error Handling:
+- If an element is not found, check for iframes, modals, or dynamic content
+- If a page doesn't load, try refreshing or going back and retrying
+- If stuck, analyze the page structure and try a different approach
+"""
 
 class AgentState(TypedDict):
     """State for the browser agent following LangGraph pattern."""
@@ -165,29 +174,53 @@ class BrowserAgent:
         tool_node = ToolNode(tools=TOOLS)
         
         # Add nodes
-        workflow.add_node("agent", self._chatbot)  # For context and element scanning
+        workflow.add_node("chatbot", self._chatbot)  # For context and element scanning
         workflow.add_node("tools", tool_node)      # For tool execution
         
-        # Add edges for back-and-forth between nodes
-        workflow.add_edge("agent", "tools")
-        workflow.add_edge("tools", "agent")
+        # Add conditional edges
+        workflow.add_conditional_edges(
+            "chatbot",
+            self._route_tools,
+            {"tools": "tools", END: END}
+        )
         
-        # Set entry point to agent for initial context gathering
-        workflow.set_entry_point("agent")
+        # Any time a tool is called, we return to the chatbot
+        workflow.add_edge("tools", "chatbot")
+        workflow.add_edge(START, "chatbot")
         
-        logger.debug("Created agent graph with ToolNode for browser automation")
+        # Set entry point to chatbot for initial context gathering
+        workflow.set_entry_point("chatbot")
+        
+        logger.debug("Created agent graph with ToolNode and conditional routing")
         return workflow.compile()
     
-    def _route_tools(self, state: AgentState) -> str:
-        """Route to tools if needed, otherwise end."""
-        if not state.get("messages"):
-            logger.debug("No messages in state, ending workflow")
-            return END
+    def _route_tools(self, state: AgentState):
+        """Route to tools node if tool calls are present, otherwise end."""
+        if not (messages := state.get("messages", [])):
+            raise ValueError("No messages found in state")
             
-        last_message = state["messages"][-1]
-        logger.debug(f"Routing decision for message type: {type(last_message).__name__}")
+        ai_message = messages[-1]
         
-        # Extract text content from the message
+        # Count tool calls to prevent infinite loops
+        tool_call_count = sum(
+            1 for msg in messages 
+            if hasattr(msg, "tool_calls") and msg.tool_calls
+        )
+        
+        # Limit maximum tool calls
+        MAX_TOOL_CALLS = 10
+        if tool_call_count >= MAX_TOOL_CALLS:
+            logger.warning(f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation")
+            return END
+        
+        # Check if the last message has tool calls
+        if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
+            return "tools"
+        
+        # No tool calls
+        return END
+
+    
     async def _chatbot(self, state: AgentState) -> AgentState:
         """Process messages with LLM and determine next step with full context.
         Handles page state, interactive elements, and LLM interaction.
@@ -233,19 +266,29 @@ class BrowserAgent:
                 elements_context
             ]
             
-            # Add context message
-            messages.append(
-                SystemMessage(
-                    content="\n\n".join([
-                        SYSTEM_PROMPT,
-                        "Current page state:",
-                        "\n".join(context)
-                    ])
-                )
-            )
+            # Create system message content
+            system_content = "\n\n".join([
+                SYSTEM_PROMPT,
+                "Current page state:",
+                "\n".join(context)
+            ])
             
-            # Get response from LLM
-            response = await self.llm.ainvoke(messages)
+            # Find and update existing system message or insert at start
+            system_found = False
+            for i, msg in enumerate(messages):
+                if isinstance(msg, SystemMessage):
+                    messages[i] = SystemMessage(content=system_content)
+                    system_found = True
+                    break
+            
+            if not system_found:
+                messages.insert(0, SystemMessage(content=system_content))
+            
+            logger.debug(f"Updated message history with {len(messages)} messages")
+            
+            # Bind static tools to the LLM and get response
+            llm_with_tools = self.llm.bind_tools(TOOLS)
+            response = await llm_with_tools.ainvoke(messages)
             
             # Check if response has tool calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
