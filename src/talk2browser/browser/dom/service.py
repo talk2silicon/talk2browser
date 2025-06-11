@@ -391,9 +391,8 @@ class DOMService:
         logger.debug(f"Calling window.highlightElements with {len(elements_data)} elements.")
         try:
             await self.page.evaluate(
-                "window.highlightElements(arguments[0], arguments[1]);",
-                elements_data,
-                None  # or pass focus index if needed
+                "(args) => window.highlightElements(args.elements, args.focusIndex)",
+                {"elements": elements_data, "focusIndex": None}
             )
             logger.debug("Successfully called window.highlightElements.")
         except Exception as e:
