@@ -6,11 +6,13 @@ and execute browser automation tasks using Playwright.
 """
 import os
 import logging
-from typing import Annotated, Sequence, TypedDict, Optional, List, Dict, Any, Tuple, cast
-import logging
-import asyncio
-import traceback
-from typing import Any, Dict, Tuple, List, Optional
+from typing import Annotated, Sequence, TypedDict, Optional
+
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_anthropic import ChatAnthropic
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_anthropic import ChatAnthropic
@@ -69,28 +71,14 @@ Example usage:
 - To fill a field: fill("#def456", "some text")
 - To get text: get_text("#abc123")
 
-Available Tools:
-- navigate(url): Navigate to a URL
-- click(selector): Click on an element (use hash like #abc123)
-- fill(selector, text): Fill a form field (use hash like #abc123)
-- press(selector, key): Press a key in an element
-- select_option(selector, value): Select an option from a dropdown
-- hover(selector): Hover over an element
-- screenshot(full_page=False): Take a screenshot
-- evaluate(script): Execute JavaScript
-- wait_for_selector(selector, timeout=30000): Wait for an element
-- get_text(selector): Get text content
-- get_attribute(selector, attribute): Get an attribute value
-- is_visible(selector): Check if element is visible
+
 
 Focus on completing tasks efficiently and reliably."""
 
 class AgentState(TypedDict):
-    """State for the browser agent."""
+    """State for the browser agent following LangGraph pattern."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    interactive_elements: Dict[str, str]  # Maps element hashes to XPaths
-    dom_service: Optional[Any] = None  # Will hold the DOMService instance
-    tool_call_count: int = 0  # Track number of tool calls to prevent infinite loops
+    next: str  # For LangGraph routing
 
 class BrowserAgent:
     """Agent for browser automation using LangGraph and Playwright."""
@@ -99,333 +87,220 @@ class BrowserAgent:
         """Initialize the browser agent.
         
         Args:
-            llm: The language model to use
-            headless: Whether to run browser in headless mode
+            llm: Optional ChatAnthropic instance. If not provided, a default one will be created.
+            headless: Whether to run the browser in headless mode.
         """
         self.headless = headless
         
-        # Get API key from environment
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
-            
         # Initialize LLM
         self.llm = llm or ChatAnthropic(
-            model="claude-3-opus-20240229",
-            temperature=0.1,
-            api_key=self.api_key
+            model=os.getenv("CLAUDE_MODEL", "claude-3-opus-20240229"),
+            temperature=0.0,
+            api_key=os.getenv("ANTHROPIC_API_KEY")
         )
         
-        self.client = None
+        # Initialize browser client and DOM service (will be started in __aenter__)
+        self.client = PlaywrightClient(headless=headless)
+        self.dom_service = None
         
-        # Create the agent graph
+        # Initialize graph
         self.graph = self._create_agent_graph()
+        
+        logger.info("BrowserAgent initialized with %s", self.llm.__class__.__name__)
     
     async def __aenter__(self):
         """Async context manager entry."""
-        if self.client is None:
-            self.client = PlaywrightClient(headless=self.headless)
+        try:
+            # Start the browser
+            logger.debug("Starting browser...")
             await self.client.start()
             
+            if not self.client.page:
+                raise RuntimeError("Failed to create browser page")
+            
+            # Wait for page to be fully loaded
+            await self.client.page.wait_for_load_state("domcontentloaded")
+            await self.client.page.wait_for_load_state("networkidle")
+            
             # Set up the page for browser tools
-            if self.client.page:
-                set_page(self.client.page)
-                
-                # Initialize DOM service
-                if hasattr(self.client, 'page') and self.client.page:
-                    from ..browser.dom.service import DOMService
-                    self.dom_service = DOMService(self.client.page)
-                    logger.info("Initialized DOM service with page")
-                else:
-                    logger.warning("No page available for DOM service initialization")
-                
-        return self
+            set_page(self.client.page)
+            
+            # Initialize DOM service
+            logger.info("Initializing DOM service...")
+            self.dom_service = DOMService(self.client.page)
+            
+            # Initial scan for interactive elements
+            logger.info("Performing initial element scan...")
+            elements = await self.dom_service.get_interactive_elements(highlight=True)
+            
+            # Get formatted elements and map
+            elements_str, element_map = self.dom_service.format_elements()
+            logger.info(f"Found {len(elements)} elements, map size: {len(element_map)}")
+            
+            logger.info("Browser and DOM service initialized successfully")
+            return self
+            
+        except Exception as e:
+            logger.error("Failed to initialize browser: %s", str(e), exc_info=True)
+            await self.__aexit__(type(e), e, None)  # Clean up on error
+            raise
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
-        if self.client is not None:
+        if hasattr(self, 'client') and self.client:
             try:
                 await self.client.close()
+                logger.info("Browser client closed successfully")
             except Exception as e:
-                logger.warning(f"Error closing browser client: {e}")
-            finally:
-                self.client = None
+                logger.warning("Error closing browser client: %s", str(e))
     
     def _create_agent_graph(self):
-        """Create and configure the LangGraph for the agent."""
-        graph_builder = StateGraph(AgentState)
+        """Create the two-node LangGraph for the agent.
+        Uses ToolNode for browser automation tools and chatbot for context management.
+        """
+        logger.info("Creating agent graph with ToolNode")
+        workflow = StateGraph(AgentState)
+        
+        # Create tool node with browser tools
+        tool_node = ToolNode(tools=TOOLS)
         
         # Add nodes
-        graph_builder.add_node("chatbot", self._chatbot)
+        workflow.add_node("agent", self._chatbot)  # For context and element scanning
+        workflow.add_node("tools", tool_node)      # For tool execution
         
-        # Create the ToolNode with the tools list
-        tool_node = ToolNode(TOOLS)
-        graph_builder.add_node("tools", tool_node)
+        # Add edges for back-and-forth between nodes
+        workflow.add_edge("agent", "tools")
+        workflow.add_edge("tools", "agent")
         
-        # Set entry point
-        graph_builder.set_entry_point("chatbot")
+        # Set entry point to agent for initial context gathering
+        workflow.set_entry_point("agent")
         
-        # Add conditional edges
-        graph_builder.add_conditional_edges(
-            "chatbot",
-            self._route_tools,
-            {
-                "tools": "tools",
-                END: END
-            }
-        )
-        
-        # Add edge from tools back to chatbot
-        graph_builder.add_edge("tools", "chatbot")
-        
-        # Compile the graph
-        logger.info("Compiling browser agent graph")
-        return graph_builder.compile()
+        logger.debug("Created agent graph with ToolNode for browser automation")
+        return workflow.compile()
     
-    def _route_tools(self, state: AgentState):
+    def _route_tools(self, state: AgentState) -> str:
         """Route to tools if needed, otherwise end."""
         if not state.get("messages"):
             logger.debug("No messages in state, ending workflow")
             return END
             
         last_message = state["messages"][-1]
-        logger.debug(f"Last message type: {type(last_message).__name__}")
+        logger.debug(f"Routing decision for message type: {type(last_message).__name__}")
         
-        # Prevent infinite recursion by limiting tool calls
-        MAX_TOOL_CALLS = 25
-        tool_call_count = state.get("tool_call_count", 0)
-        
-        if tool_call_count >= MAX_TOOL_CALLS:
-            logger.warning(f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation")
-            return END
-        
-        # Check for tool calls in the message (OpenAI format)
-        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-            logger.info(f"Tool calls detected: {last_message.tool_calls}")
-            return "tools"
-            
-        # Check for AIMessage with tool_calls attribute (LangChain format)
-        if hasattr(last_message, 'additional_kwargs') and 'tool_calls' in last_message.additional_kwargs:
-            tool_calls = last_message.additional_kwargs['tool_calls']
-            if tool_calls:
-                logger.info(f"Tool calls detected (LangChain format): {tool_calls}")
-                return "tools"
-        
-        # If no tool calls, end the workflow
-        logger.info("No tool calls detected, ending workflow")
-        return END
-    
-    async def _get_page_and_elements(self) -> Tuple[str, str, str, Dict[str, str]]:
-        """Get current page state and interactive elements."""
-        page_state = await self.client.get_page_state()
-        current_url = page_state.get('url', 'No page loaded')
-        current_title = page_state.get('title', '')
-        
-        logger.info(f"Getting page state - URL: {current_url}, Title: {current_title}")
-        
-        # Get interactive elements if we have a DOM service
-        elements_context = ""
-        element_map = {}
-        
-        if hasattr(self, 'dom_service') and self.dom_service:
-            try:
-                logger.info("Scanning page for interactive elements...")
-                elements = await self.dom_service.get_interactive_elements(highlight=True)
-                logger.debug(f"[DOMSCAN] Raw elements found: {len(elements)}")
-                for idx, el in enumerate(elements):
-                    logger.debug(f"[DOMSCAN] Raw Element {idx+1}: tag={el.tag_name}, type={el.attributes.get('type')}, id={el.attributes.get('id')}, name={el.attributes.get('name')}, text='{el.text[:50] if el.text else ''}', is_visible={el.is_visible}, is_interactive={el.is_interactive}")
-                filtered_elements = [el for el in elements if el.is_interactive and el.is_visible]
-                logger.debug(f"[DOMSCAN] Filtered interactive+visible elements: {len(filtered_elements)}")
-                for idx, el in enumerate(filtered_elements):
-                    logger.debug(f"[DOMSCAN] Kept Element {idx+1}: tag={el.tag_name}, type={el.attributes.get('type')}, id={el.attributes.get('id')}, name={el.attributes.get('name')}, text='{el.text[:50] if el.text else ''}'")
-                element_descriptions = []
-                for idx, element in enumerate(filtered_elements):
-                    element_hash = f"#{element.element_hash[:6]}"
-                    element_map[element_hash] = element.xpath
-                    desc = f"{idx + 1}. {element_hash} - {element.tag_name}"
-                    if element.attributes.get('id'):
-                        desc += f" id={element.attributes['id']}"
-                    if element.attributes.get('name'):
-                        desc += f" name={element.attributes['name']}"
-                    if element.attributes.get('type'):
-                        desc += f" type={element.attributes['type']}"
-                    if element.text:
-                        text_preview = element.text[:30] + ('...' if len(element.text) > 30 else '')
-                        desc += f" text='{text_preview}'"
-                    if not element.is_visible:
-                        desc += " (hidden)"
-                    if not element.is_interactive:
-                        desc += " (non-interactive)"
-                    element_descriptions.append(desc)
-                logger.info(f"Mapped {len(element_map)} elements with hashes")
-                elements_context = "\n".join([
-                    "Interactive elements on the page (use #hash to reference):",
-                    *element_descriptions,
-                    f"\nTotal interactive elements: {len(filtered_elements)}"
-                ])
-                return current_url, current_title, elements_context, element_map
-            except Exception as e:
-                logger.error(f"Error getting interactive elements: {e}", exc_info=True)
-                return current_url, current_title, f"Error getting interactive elements: {str(e)}", element_map  # Return existing element_map
-        else:
-            return current_url, current_title, "", element_map  # Return the element_map instead of empty dict
-    
-    async def _chatbot(self, state: AgentState):
-        """Process messages with LLM and determine next step with full context."""
+        # Extract text content from the message
+    async def _chatbot(self, state: AgentState) -> AgentState:
+        """Process messages with LLM and determine next step with full context.
+        Handles page state, interactive elements, and LLM interaction.
+        """
         messages = state["messages"]
         
         try:
-            # Get current page state
+            # Get page state
+            logger.info("Getting current page state")
             page_state = await self.client.get_page_state()
-            state["current_url"] = page_state.get("url")
+            current_url = page_state.get('url', 'No page loaded')
+            current_title = page_state.get('title', '')
             
-            # Get user input from messages
-            user_input = next((msg.content for msg in messages[::-1] 
-                             if isinstance(msg, HumanMessage)), "")
+            # Get interactive elements if DOM service is available
+            elements_context = ""
+            element_map = {}
             
-            # Get interactive elements and create element map
-            current_url, current_title, elements_context, element_map = await self._get_page_and_elements()
+            if self.dom_service:
+                try:
+                    # Refresh interactive elements
+                    logger.info("Refreshing interactive elements...")
+                    await self.dom_service.get_interactive_elements(highlight=True)
+                    
+                    # Get formatted elements and map
+                    elements_context, element_map = self.dom_service.format_elements()
+                    logger.info(f"Retrieved {len(element_map)} interactive elements")
+                    
+                    # Add element map to state for tools
+                    state["element_map"] = element_map
+                    logger.debug(f"Added element map to state")
+                    
+                except Exception as e:
+                    logger.error(f"Error getting interactive elements: {e}", exc_info=True)
+                    elements_context = f"Error scanning elements: {str(e)}"
+            else:
+                logger.warning("No DOM service available")
+                elements_context = "DOM service not initialized"
             
-            # Update page state with interactive elements
-            page_state['interactive_elements'] = [
-                el for el in element_map.values()
-                if isinstance(el, dict) and 'xpath' in el
+            # Build context for LLM
+            context = [
+                f"Current URL: {current_url}",
+                f"Page title: {current_title}",
+                elements_context
             ]
             
-            # Format interactive elements for context
-            elements_context = self._format_elements(page_state.get('interactive_elements', []))
-            
-            # Format conversation history
-            conversation_history = self._format_history(messages)
-            
-            # Build enhanced system message with full context
-            system_msg = SystemMessage(
-                content=f"""{SYSTEM_PROMPT}
-                
-                ## Current Page Context
-                URL: {page_state.get('url', 'No page loaded')}
-                Title: {page_state.get('title', '')}
-                
-                ## Interactive Elements
-                {elements_context}
-                
-                ## Conversation History
-                {conversation_history}
-                
-                ## Available Tools
-                {self._format_tools(TOOLS)}
-                """.strip()
+            # Add context message
+            messages.append(
+                SystemMessage(
+                    content="\n\n".join([
+                        SYSTEM_PROMPT,
+                        "Current page state:",
+                        "\n".join(context)
+                    ])
+                )
             )
             
-            # Prepare conversation with updated context
-            conversation = [system_msg] + [
-                msg for msg in messages 
-                if not isinstance(msg, SystemMessage)
-            ]
+            # Get response from LLM
+            response = await self.llm.ainvoke(messages)
             
-            # Prepare model with tools
-            model_with_tools = self.llm.bind_tools(TOOLS)
+            # Check if response has tool calls
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                logger.info("Tool calls detected in LLM response")
+                return {
+                    "messages": messages + [response],
+                    "next": "tools"
+                }
             
-            # Call LLM
-            logger.info("Sending message to LLM with updated context...")
-            response = await model_with_tools.ainvoke(conversation)
-            logger.debug(f"Received response from LLM: {response}")
-            
-            # Process tool calls if any
-            tool_calls = []
-            if hasattr(response, "tool_calls") and response.tool_calls:
-                tool_calls = response.tool_calls
-            elif hasattr(response, "additional_kwargs") and "tool_calls" in response.additional_kwargs:
-                tool_calls = response.additional_kwargs["tool_calls"]
-            
-            if tool_calls:
-                # Inject element map into tool calls
-                self._inject_element_map_into_tool_calls(tool_calls, element_map)
-                tool_call_count = state.get("tool_call_count", 0) + 1
-                logger.info(f"Tool call detected, count: {tool_call_count}")
-                logger.debug(f"Tool calls: {tool_calls}")
-                state["tool_call_count"] = tool_call_count
-            
-            # Add AI response to messages
-            messages.append(response)
-            
+            # No tool calls, end the conversation
+            logger.info("No tool calls in LLM response, ending conversation")
             return {
-                "messages": messages,
-                "interactive_elements": element_map,
-                "tool_call_count": state.get("tool_call_count", 0),
-                "dom_service": getattr(self, "dom_service", None)
+                "messages": messages + [response],
+                "next": END
             }
             
-            except Exception as llm_error:
-                error_msg = f"Error calling LLM: {str(llm_error)}"
-                logger.error(error_msg, exc_info=True)
-                return {
-                    "messages": messages + [ToolMessage(content=error_msg, name="error")],
-                    "interactive_elements": element_map,
-                    "tool_call_count": tool_call_count,
-                    "dom_service": getattr(self, "dom_service", None)
-                }
-        
         except Exception as e:
             error_msg = f"Error in chatbot: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return {
-                "messages": messages + [ToolMessage(content=error_msg, name="error", tool_call_id="error_0")],
-                "interactive_elements": state.get("interactive_elements", {}),
-                "tool_call_count": tool_call_count
+                "messages": messages + [SystemMessage(content=error_msg)],
+                "next": END
             }
     
-    def _ensure_system_prompt(self, messages: List[BaseMessage], current_url: str, current_title: str, elements_context: str = "") -> List[BaseMessage]:
-        """Ensure system prompt is present in messages and contains current context."""
-        # Remove any existing system messages
-        messages = [msg for msg in messages if not isinstance(msg, SystemMessage)]
-        
-        # Create new system message with current context
-        system_msg = SystemMessage(
-            content=f"""{SYSTEM_PROMPT}
-            
-            Current page: {current_url}
-            Title: {current_title}
-            
-            {elements_context}
-            """
-        )
-        
-        # Add the new system message at the beginning
-        return [system_msg] + messages
-    
-    def _inject_element_map_into_tool_calls(self, tool_calls: List[Dict[str, Any]], element_map: Dict[str, str]) -> None:
-        """Inject element_map into browser tool calls."""
-        for tool_call in tool_calls:
-            tool_func = next((t for t in TOOLS if getattr(t, "name", None) == tool_call.get("name")), None)
-            if tool_func and getattr(tool_func, "_is_browser_tool", False):
-                tool_call["args"]["element_map"] = element_map
-    
-    async def run(self, task: str, **kwargs) -> str:
+    async def run(self, task: str) -> str:
         """Run the agent with the given task.
         
         Args:
             task: The task or query for the agent.
-            **kwargs: Additional arguments to pass to the agent.
             
         Returns:
             The agent's response as a string.
         """
         try:
-            # Initialize state with the user's task
-            initial_state = {
-                "messages": [HumanMessage(content=task)]
-            }
+            # Initialize state
+            initial_state = AgentState(
+                messages=[HumanMessage(content=task)],
+                next="agent"
+            )
             
             # Run the graph
+            logger.info(f"Starting agent with task: {task}")
             result = await self.graph.ainvoke(initial_state)
             
-            # Extract the final response
-            last_message = result["messages"][-1]
-            if hasattr(last_message, 'content'):
-                return last_message.content
-            return str(last_message)
+            # Get final response
+            messages = result["messages"]
+            last_message = messages[-1]
+            
+            # Extract content from last message
+            response = last_message.content if hasattr(last_message, 'content') else str(last_message)
+            logger.info("Agent task completed")
+            
+            return response
             
         except Exception as e:
-            logger.error(f"Error running agent: {e}", exc_info=True)
-            return f"Error: {str(e)}"
+            error_msg = f"Error running agent: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return error_msg
