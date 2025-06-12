@@ -348,8 +348,8 @@ class BrowserAgent:
                 recorder.to_json("./generated/actions.json")
                 logger.info("Action log saved to ./generated/actions.json")
                 script_path = await recorder.generate_playwright_script(
-                    output_path="./generated/generated_script.py",
-                    llm=self.llm
+                    llm=self.llm,
+                    task=task
                 )
                 logger.info(f"Generated Playwright script: {script_path}")
             except Exception as final_exc:

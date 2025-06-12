@@ -35,6 +35,103 @@ def resolve_hash_args(tool_func):
 # Global page reference
 _page: Optional[Page] = None
 
+@tool
+@resolve_hash_args
+async def get_all_elements(selector: str, attribute: str = "", **kwargs) -> str:
+    """Get a list of text or attribute values for all elements matching the selector.
+    Args:
+        selector: CSS selector
+        attribute: If provided, returns this attribute for each element; otherwise, returns text content.
+    Returns:
+        str: JSON list of values
+    """
+    import logging
+    import json
+    logger = logging.getLogger(__name__)
+    if not _page:
+        error_msg = "Page not set. Call set_page() first"
+        logger.error(error_msg)
+        return f"Error: {error_msg}"
+    try:
+        elements = await _page.query_selector_all(selector)
+        results = []
+        for el in elements:
+            if attribute:
+                val = await el.get_attribute(attribute)
+            else:
+                val = await el.text_content()
+            results.append(val or "")
+        logger.info(f"Found {len(results)} elements for {selector}")
+        recorder.record_action(
+            tool="get_all_elements",
+            args={"selector": selector, "attribute": attribute},
+            command=f"await page.query_selector_all('{selector}')"
+        )
+        return json.dumps(results)
+    except Exception as e:
+        logger.error(f"Failed to get all elements for {selector}: {e}")
+        return f"Error: {e}"
+
+@tool
+@resolve_hash_args
+async def is_enabled(selector: str, **kwargs) -> bool:
+    """Check if an element is enabled (not disabled).
+    Args:
+        selector: CSS selector
+    Returns:
+        bool: True if enabled, False if disabled or not found
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    if not _page:
+        logger.error("Page not set. Call set_page() first")
+        return False
+    try:
+        el = await _page.query_selector(selector)
+        if not el:
+            logger.warning(f"Element not found for {selector}")
+            return False
+        disabled = await el.get_attribute("disabled")
+        enabled = disabled is None
+        logger.info(f"Element {selector} enabled: {enabled}")
+        recorder.record_action(
+            tool="is_enabled",
+            args={"selector": selector},
+            command=f"await page.query_selector('{selector}').get_attribute('disabled')"
+        )
+        return enabled
+    except Exception as e:
+        logger.error(f"Failed to check enabled for {selector}: {e}")
+        return False
+
+@tool
+@resolve_hash_args
+async def get_count(selector: str, **kwargs) -> int:
+    """Return the number of elements matching the selector.
+    Args:
+        selector: CSS selector
+    Returns:
+        int: Number of elements found
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    if not _page:
+        logger.error("Page not set. Call set_page() first")
+        return 0
+    try:
+        elements = await _page.query_selector_all(selector)
+        count = len(elements)
+        logger.info(f"Found {count} elements for {selector}")
+        recorder.record_action(
+            tool="get_count",
+            args={"selector": selector},
+            command=f"len(await page.query_selector_all('{selector}'))"
+        )
+        return count
+    except Exception as e:
+        logger.error(f"Failed to get count for {selector}: {e}")
+        return 0
+
 def set_page(page: Page) -> None:
     """Set the Playwright page to use for browser interactions."""
     global _page

@@ -28,7 +28,7 @@ class ActionRecorder:
     def clear(self) -> None:
         self.actions.clear()
 
-    async def generate_playwright_script(self, output_path: str, llm) -> str:
+    async def generate_playwright_script(self, llm, task: str) -> str:
         """Generate a Playwright script from recorded actions using LLM."""
         if not self.actions:
             raise ValueError("No recorded actions found")
@@ -60,6 +60,16 @@ class ActionRecorder:
                   "Generate ONLY the Python code, with no additional text or formatting.\n"
                   "Make sure to include `headless=False` when launching the browser.\n"
                   "Add `asyncio.sleep(0.5)` between actions for better visibility.")
+
+        # Generate a unique output path based on timestamp and prompt/task
+        import re
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Sanitize task: keep only alphanum/underscore, limit to 8 words
+        words = re.findall(r'\w+', task)[:8]
+        prompt_snippet = '_'.join(words).lower()
+        filename = f"generated_script_{timestamp}_{prompt_snippet}.py"
+        output_path = str(Path("./generated") / filename)
 
         # Use LLM to generate script
         try:
