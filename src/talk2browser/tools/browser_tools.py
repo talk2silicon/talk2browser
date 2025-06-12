@@ -385,8 +385,11 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         
         # Take a screenshot to help with debugging
         try:
-            screenshot = await _page.screenshot(type='png')
-            logger.debug(f"Screenshot taken after error (size: {len(screenshot)} bytes)")
+            import os
+            os.makedirs('./screenshots', exist_ok=True)
+            screenshot_path = f"./screenshots/click_error_{selector}.png"
+            screenshot = await _page.screenshot(path=screenshot_path, type='png')
+            logger.debug(f"Screenshot taken after error and saved to {screenshot_path} (size: {len(screenshot)} bytes)")
         except Exception as screenshot_error:
             logger.error(f"Failed to take screenshot: {screenshot_error}")
             
@@ -535,8 +538,11 @@ async def wait_for_selector(selector: str, timeout: int = 30000, **kwargs) -> st
         logger.error(error_msg)
         # Take a screenshot to help with debugging
         try:
-            screenshot = await _page.screenshot(type='png')
-            logger.debug(f"Screenshot taken after error (size: {len(screenshot)} bytes)")
+            import os
+            os.makedirs('./screenshots', exist_ok=True)
+            screenshot_path = f"./screenshots/click_error_{selector}.png"
+            screenshot = await _page.screenshot(path=screenshot_path, type='png')
+            logger.debug(f"Screenshot taken after error and saved to {screenshot_path} (size: {len(screenshot)} bytes)")
         except Exception as screenshot_error:
             logger.error(f"Failed to take screenshot: {screenshot_error}")
         
@@ -687,8 +693,11 @@ async def list_interactive_elements() -> str:
         
         # Take a screenshot for reference
         try:
-            screenshot = await _page.screenshot(type='png')
-            logger.debug(f"Page screenshot taken (size: {len(screenshot)} bytes)")
+            import os
+            os.makedirs('./screenshots', exist_ok=True)
+            screenshot_path = f"./screenshots/list_interactive_elements_{selector if 'selector' in locals() else 'page'}.png"
+            screenshot = await _page.screenshot(path=screenshot_path, type='png')
+            logger.debug(f"Page screenshot taken and saved to {screenshot_path} (size: {len(screenshot)} bytes)")
         except Exception as screenshot_error:
             logger.error(f"Failed to take screenshot: {screenshot_error}")
         
