@@ -5,6 +5,9 @@ import logging
 from playwright.async_api import Page
 from langchain.tools import tool
 
+# Action recorder import
+from ..agent.action_recorder_singleton import recorder
+
 # Decorator to resolve hash arguments using element_map
 import functools
 
@@ -52,6 +55,12 @@ async def navigate(url: str) -> str:
         
     await _page.goto(url)
     title = await _page.title()
+    # Record action
+    recorder.record_action(
+        tool="navigate",
+        args={"url": url},
+        command=f"await page.goto('{url}')"
+    )
     return f"Navigated to {url}. Page title: {title}"
 
 @tool
@@ -78,7 +87,46 @@ async def click(selector: str, timeout: int = 10000, force: bool = False, **kwar
     
     try:
         logger.info(f"Attempting to click element: {selector}")
-        
+
+        # --- Hash resolution: auto-resolve hashes to selectors using DOMService ---
+        if selector and isinstance(selector, str) and selector.startswith("#") and len(selector) == 33:
+            try:
+                from ..browser.dom.service import DOMService
+                if _page:
+                    dom_service = DOMService(_page)
+                    # Ensure element map is up to date
+                    await dom_service.get_interactive_elements(highlight=False)
+                    element_map = dom_service.get_element_map()
+                    resolved = element_map.get(selector)
+                    if resolved:
+                        logger.info(f"Resolved hash {selector} to selector: {resolved}")
+                        selector = resolved
+                    else:
+                        logger.error(f"Selector '{selector}' looks like a hash but could not be resolved to a real selector via DOMService.")
+                        return f"Error: Selector '{selector}' looks like a hash, but could not be resolved to a real selector."
+                else:
+                    logger.error("_page is not set; cannot resolve hash selector.")
+                    return f"Error: _page is not set; cannot resolve hash selector {selector}."
+            except Exception as hash_exc:
+                logger.error(f"Exception while resolving hash selector: {hash_exc}")
+                return f"Error: Exception while resolving hash selector {selector}: {hash_exc}"
+        # --- END HASH RESOLUTION ---
+
+        # --- DEBUG: Print all interactive elements with hash and values ---
+        try:
+            from ..browser.dom.service import DOMService
+            if _page:
+                dom_service = DOMService(_page)
+                elements = await dom_service.get_interactive_elements(highlight=False)
+                logger.info("Interactive elements on page (hash, tag, text, attributes):")
+                for el in elements:
+                    logger.info(f"  hash=#{el.element_hash} tag={el.tag_name} text={el.text} attrs={el.attributes}")
+            else:
+                logger.warning("_page is not set; cannot print interactive elements.")
+        except Exception as debug_elem_exc:
+            logger.error(f"Failed to print interactive elements for debug: {debug_elem_exc}")
+        # --- END DEBUG ---
+
         # Wait for the element to be visible and enabled
         element = await _page.wait_for_selector(
             selector,
@@ -119,6 +167,12 @@ async def click(selector: str, timeout: int = 10000, force: bool = False, **kwar
                 logger.debug(f"Trying {method_name} click on {selector}")
                 await click_func()
                 logger.info(f"Successfully clicked element using {method_name}: {selector}")
+                # Record action
+                recorder.record_action(
+                    tool="click",
+                    args={"selector": selector, "timeout": timeout, "force": force},
+                    command=f"await page.click('{selector}', timeout={timeout}, force={force})"
+                )
                 return f"Clicked element: {selector} (method: {method_name})"
             except Exception as e:
                 last_error = e
@@ -131,6 +185,12 @@ async def click(selector: str, timeout: int = 10000, force: bool = False, **kwar
                 logger.debug(f"Trying final force click on {selector}")
                 await element.click(force=True, timeout=5000)
                 logger.info(f"Successfully force-clicked element: {selector}")
+                # Record action
+                recorder.record_action(
+                    tool="click",
+                    args={"selector": selector, "timeout": timeout, "force": force},
+                    command=f"await page.click('{selector}', timeout={timeout}, force={force})"
+                )
                 return f"Clicked element: {selector} (method: final_force_click)"
             except Exception as e:
                 last_error = e
@@ -204,7 +264,13 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         await element.fill("")
         
         # Type the text with a small delay between keystrokes
-        await element.fill(text)
+        await _page.fill(selector, text)
+        # Record action
+        recorder.record_action(
+            tool="fill",
+            args={"selector": selector, "text": text},
+            command=f"await page.fill('{selector}', '{text}')"
+        )
         
         # Verify the text was entered
         value = await element.input_value()
@@ -245,6 +311,12 @@ async def press(selector: str, key: str, **kwargs) -> str:
         raise RuntimeError("Page not set. Call set_page() first")
         
     await _page.press(selector, key)
+    # Record action
+    recorder.record_action(
+        tool="press",
+        args={"selector": selector, "key": key},
+        command=f"await page.press('{selector}', '{key}')"
+    )
     return f"Pressed '{key}' in {selector}"
 
 @tool
@@ -263,6 +335,12 @@ async def select_option(selector: str, value: str, **kwargs) -> str:
         raise RuntimeError("Page not set. Call set_page() first")
         
     await _page.select_option(selector, value=value)
+    # Record action
+    recorder.record_action(
+        tool="select_option",
+        args={"selector": selector, "value": value},
+        command=f"await page.select_option('{selector}', '{value}')"
+    )
     return f"Selected option '{value}' in {selector}"
 
 @tool
@@ -280,6 +358,12 @@ async def hover(selector: str, **kwargs) -> str:
         raise RuntimeError("Page not set. Call set_page() first")
         
     await _page.hover(selector)
+    # Record action
+    recorder.record_action(
+        tool="hover",
+        args={"selector": selector},
+        command=f"await page.hover('{selector}')"
+    )
     return f"Hovered over {selector}"
 
 @tool
@@ -341,6 +425,12 @@ async def wait_for_selector(selector: str, timeout: int = 30000, **kwargs) -> st
             state="visible",
             timeout=timeout
         )
+        # Record action
+        recorder.record_action(
+            tool="wait_for_selector",
+            args={"selector": selector, "timeout": timeout},
+            command=f"await page.wait_for_selector('{selector}', state='visible', timeout={timeout})"
+        )
         logger.info(f"Successfully found visible element: {selector}")
         return f"Element {selector} is now visible"
     except Exception as e:
@@ -369,7 +459,14 @@ async def get_text(selector: str, **kwargs) -> str:
     if not _page:
         raise RuntimeError("Page not set. Call set_page() first")
         
-    return await _page.text_content(selector)
+    text = await _page.text_content(selector)
+    # Record action
+    recorder.record_action(
+        tool="get_text",
+        args={"selector": selector},
+        command=f"await page.text_content('{selector}')"
+    )
+    return text or ""
 
 @tool
 @resolve_hash_args
@@ -386,7 +483,14 @@ async def get_attribute(selector: str, attribute: str, **kwargs) -> str:
     if not _page:
         raise RuntimeError("Page not set. Call set_page() first")
         
-    return await _page.get_attribute(selector, attribute) or ""
+    value = await _page.get_attribute(selector, attribute) or ""
+    # Record action
+    recorder.record_action(
+        tool="get_attribute",
+        args={"selector": selector, "attribute": attribute},
+        command=f"await page.get_attribute('{selector}', '{attribute}')"
+    )
+    return value
 
 @tool
 @resolve_hash_args
@@ -402,7 +506,14 @@ async def is_visible(selector: str, **kwargs) -> bool:
     if not _page:
         return False
         
-    return await _page.is_visible(selector)
+    result = await _page.is_visible(selector)
+    # Record action
+    recorder.record_action(
+        tool="is_visible",
+        args={"selector": selector},
+        command=f"await page.is_visible('{selector}')"
+    )
+    return result
 
 @tool
 async def list_interactive_elements() -> str:

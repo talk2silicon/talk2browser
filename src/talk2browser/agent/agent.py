@@ -339,9 +339,24 @@ class BrowserAgent:
             # Extract content from last message
             response = last_message.content if hasattr(last_message, 'content') else str(last_message)
             logger.info("Agent task completed")
-            
+
+            # --- Final block: generate script and JSON log ---
+            try:
+                from .action_recorder_singleton import recorder  # Use relative import
+                import os
+                os.makedirs("./generated", exist_ok=True)
+                recorder.to_json("./generated/actions.json")
+                logger.info("Action log saved to ./generated/actions.json")
+                script_path = await recorder.generate_playwright_script(
+                    output_path="./generated/generated_script.py",
+                    llm=self.llm
+                )
+                logger.info(f"Generated Playwright script: {script_path}")
+            except Exception as final_exc:
+                logger.error(f"Failed to generate script or log: {final_exc}")
+            # --- End final block ---
+
             return response
-            
         except Exception as e:
             error_msg = f"Error running agent: {str(e)}"
             logger.error(error_msg, exc_info=True)
