@@ -13,13 +13,14 @@ PROMPT_TEMPLATE = """You are an expert at writing Playwright scripts. Convert th
 
 Guidelines:
 1. Use page.locator() for all element selections
-2. Add comments to explain the purpose of each action
-3. Include proper error handling
-4. Add appropriate waits where necessary
-5. Use async/await pattern
-6. Include necessary imports and setup code
-7. Add type hints for better IDE support
-8. Include a main() function with proper cleanup
+2. For every input field (such as username, password, search, etc.), always generate a .fill() action with an appropriate value, even if a click is also performed. Use realistic default values (e.g., 'standard_user' for username) or placeholders (e.g., 'YOUR_PASSWORD') for sensitive data. Do not leave input fields empty unless explicitly instructed.
+3. Add comments to explain the purpose of each action
+4. Include proper error handling
+5. Add appropriate waits where necessary
+6. Use async/await pattern
+7. Include necessary imports and setup code
+8. Add type hints for better IDE support
+9. Include a main() function with proper cleanup
 
 Actions:
 {actions}
