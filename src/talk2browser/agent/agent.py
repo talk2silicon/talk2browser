@@ -389,11 +389,12 @@ class BrowserAgent:
                 os.makedirs("./generated", exist_ok=True)
                 recorder.to_json("./generated/actions.json")
                 logger.info("Action log saved to ./generated/actions.json")
-                script_path = await recorder.generate_playwright_script(
+                # Switched to Cypress script generation (Playwright generation disabled)
+                script_path = await recorder.generate_cypress_script(
                     llm=self.llm,
                     task=task
                 )
-                logger.info(f"Generated Playwright script: {script_path}")
+                logger.info(f"Generated Cypress script: {script_path}")
                 # Info mode: print final story summary
                 if self.info_mode:
                     print("\n[INFO MODE: Step-by-Step Story]")

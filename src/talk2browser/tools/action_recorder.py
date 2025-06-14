@@ -11,6 +11,75 @@ class ActionRecorder:
         self.logger = logging.getLogger(__name__)
         self.base_name: Optional[str] = None  # Used for consistent file naming
 
+    async def generate_cypress_script(self, llm, task: str) -> str:
+        """Generate a Cypress script from recorded actions using LLM and set consistent base name."""
+        if not self.actions:
+            raise ValueError("No recorded actions found")
+
+        # Format actions for the prompt
+        formatted_actions = []
+        for i, action in enumerate(self.actions, 1):
+            formatted_actions.append(f"{i}. {action['command']}")
+
+        # Cypress LLM Prompt
+        prompt = (
+            "You are an expert at writing Cypress end-to-end tests.\n"
+            "Convert the following recorded browser actions into a clean, maintainable Cypress test script.\n\n"
+            "IMPORTANT: Only output the raw JavaScript code, without any markdown formatting, explanations, or additional text.\n"
+            "The output should be a complete, runnable Cypress test file (e.g., .cy.js) that can be executed directly.\n\n"
+            "Guidelines:\n"
+            "1. Add proper Cypress imports and describe/it blocks.\n"
+            "2. Add comments to explain the purpose of each action.\n"
+            "3. Use cy.visit, cy.get, cy.type, cy.click, cy.check, cy.uncheck, cy.select, etc. as appropriate.\n"
+            "4. Add human-like delays between actions using cy.wait(500).\n"
+            "5. Do not include any markdown formatting (```js or ``` or ```javascript)\n"
+            "6. Do not include any explanations or additional text outside the script.\n\n"
+            "Here are the recorded browser commands (in Playwright-style):\n"
+            "{actions}\n\n"
+            "Generate ONLY the JavaScript code, with no additional text or formatting.\n"
+            "Add cy.wait(500) between actions for better visibility."
+        )
+
+        # Generate a unique output path and base name based on timestamp and prompt/task
+        import re
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        words = re.findall(r'\w+', task)[:8]
+        prompt_snippet = '_'.join(words).lower()
+        self.base_name = f"generated_script_{timestamp}_{prompt_snippet}"
+        filename = f"{self.base_name}.cy.js"
+        output_path = str(Path("./generated") / filename)
+        self.logger.debug(f"[Cypress] Using base name for files: {self.base_name}")
+
+        # Use LLM to generate script
+        try:
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+            chain = ChatPromptTemplate.from_template(prompt) | llm | StrOutputParser()
+            script = await chain.ainvoke({"actions": "\n".join(formatted_actions)})
+            script = script.strip()
+            # Remove markdown code block markers if present
+            if script.startswith('```javascript'):
+                script = script[13:]
+            elif script.startswith('```js'):
+                script = script[5:]
+            elif script.startswith('```'):
+                script = script[3:]
+            if script.endswith('```'):
+                script = script[:-3]
+            script = script.split('Explanation:')[0].strip()
+            script = script.rstrip() + '\n'
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_text(script, encoding='utf-8')
+            self.logger.info(f"Cypress script generated at {output_path}")
+            # Save actions to JSON with same base name
+            self.to_json()
+            self.clear()
+            return str(Path(output_path).absolute())
+        except Exception as e:
+            self.logger.error(f"Failed to generate Cypress script: {e}")
+            raise
+
     def record_action(self, tool: str, args: Dict[str, Any], command: str, screenshot_path: Optional[str] = None) -> None:
         self.logger.debug(f"Recording action: {tool} {args}")
         self.actions.append({
