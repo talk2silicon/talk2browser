@@ -192,7 +192,7 @@ class BrowserAgent:
         )
         
         # Limit maximum tool calls
-        MAX_TOOL_CALLS = 4
+        MAX_TOOL_CALLS = 10
         if tool_call_count >= MAX_TOOL_CALLS:
             logger.warning(f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation")
             return END

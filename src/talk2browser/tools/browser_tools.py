@@ -171,14 +171,21 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
-        logger.info(f"Attempting to click {selector} (timeout={timeout}, force={force}) on BrowserPage (url: {getattr(page, 'url', None)})")
+        # Detect XPath and prefix as needed
+        orig_selector = selector
+        if selector.startswith('/') or selector.startswith('html/'):
+            selector = f"xpath={selector}"
+            logger.debug(f"Selector '{orig_selector}' looks like XPath, transformed to '{selector}' for Playwright locator.")
+        else:
+            logger.debug(f"Selector '{selector}' used as-is for Playwright locator.")
+        logger.info(f"Attempting to click {selector} (timeout={timeout}) on BrowserPage (url: {getattr(page, 'url', None)})")
         locator = page.locator(selector)
         await locator.wait_for(state='visible', timeout=timeout)
-        await locator.click(force=force)
+        await locator.click()
         recorder.record_action(
             tool="click",
-            args={"selector": selector, "timeout": timeout, "force": force},
-            command=f"await page.locator('{selector}').click(force={force})"
+            args={"selector": selector, "timeout": timeout},
+            command=f"await page.locator('{selector}').click()"
         )
         logger.info(f"Clicked {selector}")
         return f"Clicked {selector}"
@@ -231,11 +238,7 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                 if browser_page and hasattr(browser_page, "get_dom_service"):
                     dom_service = browser_page.get_dom_service()
                     logger.debug(f"Fetched dom_service in finally block: {dom_service}")
-                if dom_service:
-                    await dom_service.clear_element_action_highlight(xpath)
-                    logger.debug(f"Cleared highlight for element {xpath} after fill action")
-                else:
-                    logger.warning(f"dom_service not available in finally block; could not clear highlight for {xpath}")
+
     except Exception as e:
         error_msg = f"Failed to fill field {selector}: {str(e)}"
         logger.error(error_msg)

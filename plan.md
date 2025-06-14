@@ -1,4 +1,65 @@
-# Project Plan: Playwright Script Generation and Sensitive Data Handling
+# Project Plan: Playwright Script Generation, DOM Highlighting, and Sensitive Data Handling
+
+## Objective
+Build a self-improving browser automation system for testing a specific web application, starting with Playwright functions (click, fill, navigate), learning from user interactions, saving scripts, and continuously improving test coverage and reliability.
+
+## Recent Context
+- **Element highlighting refactor:** Only dashed border for all interactive elements (LLM context) remains. All explicit Playwright action highlight logic (blue border) has been removed from both JS and Python. The browser now relies on native browser/site focus/active cues for actions.
+- **Removed:** `.t2b-element-highlight-active` CSS, `highlight_element_for_action`, and `clear_element_action_highlight` from DOMService and all tool functions.
+- **Preserved:** `.t2b-element-highlight` for context highlighting (dashed border), with no background override (original element colors preserved).
+- **Current plan and task list updated for continuity after IDE restart.**
+
+## Current Working Plan
+### Browser Automation Refactor Plan
+
+#### Notes
+- Each browser page (tab/window/popup) is represented by a `BrowserPage` object.
+- Each `BrowserPage` has its own `DOMService` instance (no singleton/global DOM state).
+- `PageManager` tracks all open `BrowserPage` objects and manages which is currently active. Implemented as a singleton with `get_instance()`.
+- All browser tools should interact with the Playwright page and DOM service via the `BrowserPage` abstraction, fetched from `PageManager.get_instance().get_current_page()`.
+- Naming aligns with Playwright conventions for clarity and maintainability.
+- Debug logging and test coverage must be maintained throughout the refactor.
+- `anthropic._base_client` logging set to WARNING to reduce noise.
+- `tools/__init__.py` synchronized with available tools in `tools/browser_tools.py`.
+- DOM element hash map logic encapsulated within `DOMService`.
+- Agent's `custom_tool_dispatch_node` removed (using standard `ToolNode`).
+- Conditional routing from the 'agent' node (chatbot) to 'tools' or `END` uses `add_conditional_edges`.
+- LLM cannot pass Python objects (like `BrowserPage`) to tools; tools must fetch `BrowserPage` internally if needed.
+- Duplicate `PageManager` definition in `browser/page_manager.py` removed.
+- Scripts run as modules (e.g., `python -m examples.test_agent`) for consistent import contexts.
+- Playwright's `locator()` expects XPath selectors to be prefixed with `xpath=`.
+- `buildDomTree.js` uses only class-based highlighting for interactive elements.
+- Python lint errors in `browser_tools.py` (empty try blocks) fixed.
+- Highlighting logic in tools like `fill`, `click` refactored to remove explicit action highlight.
+- Debug logging added for tool calls and important state changes.
+
+#### Task List
+- [x] Refactor or define `DOMService` to be per-page (no global state).
+- [x] Implement `BrowserPage` abstraction and update browser tool functions.
+- [x] Implement `PageManager` singleton.
+- [x] Update agent logic for page management.
+- [x] Add debug logging.
+- [x] Update `tools/__init__.py`.
+- [x] Remove `get_all_elements` tool.
+- [x] Fix Playwright locator usage for XPath selectors.
+- [x] Refactor agent's internal DOM service handling.
+- [x] Remove duplicate `PageManager` definition.
+- [x] Fix hash resolution errors.
+- [x] Fix Playwright locator usage and `NameError` in `click` tool.
+- [x] Refactor duplicated error handling logic in browser tools.
+- [x] Remove all explicit Playwright action highlight logic (blue border) from JS and Python.
+- [x] Remove `.t2b-element-highlight-active` CSS and related JS logic.
+- [x] Remove `highlight_element_for_action` and `clear_element_action_highlight` from DOMService.
+- [x] Remove calls to those methods from browser tool functions.
+- [x] Update `clearHighlights` to only remove `.t2b-element-highlight`.
+- [x] Confirm only LLM context highlight (dashed border) remains.
+- [ ] Verify overall element highlighting and proceed with remaining tasks.
+
+## Current Goal
+- Keep only dashed border highlight for all interactive elements (LLM context).
+- Remove all explicit Playwright action highlight logic (blue border) from both JS and Python.
+- Save this context and plan for continuity after IDE restart.
+
 
 ## Objective
 Debug, enhance, and stabilize Playwright script generation within the talk2browser project by implementing a robust ActionRecorder, adding missing atomic Playwright browser tools for advanced e-commerce automation, ensuring unique timestamped filenames for generated scripts, and securely handling sensitive data by substituting placeholders with real values only at execution time, while restricting browser navigation to allowed domains and preventing sensitive data exposure to the LLM.

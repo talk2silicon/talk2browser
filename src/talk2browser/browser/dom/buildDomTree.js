@@ -45,12 +45,7 @@ window.buildDomTree = (
           box-shadow: none !important;
           transition: outline 0.15s;
         }
-        .t2b-element-highlight-active {
-          outline: 2px solid #007aff !important;
-          outline-offset: 0px !important;
-          box-shadow: none !important;
-          transition: outline 0.15s;
-        }
+
       `;
       document.head.appendChild(style);
     }

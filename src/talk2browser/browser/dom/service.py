@@ -124,25 +124,6 @@ class DOMElement:
         }
 
 class DOMService:
-    async def highlight_element_for_action(self, xpath: str):
-        """Highlight an element for Playwright action (blue border)."""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(f"Highlighting element for action with xpath: {xpath}")
-        await self.page.evaluate('''(sel) => {
-            const el = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            if (el) el.classList.add('t2b-element-highlight-active');
-        }''', xpath)
-
-    async def clear_element_action_highlight(self, xpath: str):
-        """Remove Playwright action highlight from element (blue border)."""
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(f"Clearing action highlight for element with xpath: {xpath}")
-        await self.page.evaluate('''(sel) => {
-            const el = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            if (el) el.classList.remove('t2b-element-highlight-active');
-        }''', xpath)
 
     """Service for interacting with the page DOM using buildDomTree.js."""
     
