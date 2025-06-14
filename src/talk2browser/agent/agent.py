@@ -25,7 +25,7 @@ from ..browser.dom.service import DOMService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools.browser_tools import (
-    navigate, click, fill, get_count, is_enabled, list_interactive_elements
+    navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html
 )
 # The following tools are not implemented in browser_tools.py:
 # press, select_option, hover, screenshot, wait_for_selector, get_text, get_attribute, is_visible
@@ -48,7 +48,8 @@ TOOLS = [
     fill,
     get_count,
     is_enabled,
-    list_interactive_elements
+    list_interactive_elements,
+    generate_pdf_from_html
     # Add more tools here as they are implemented
 ]
 

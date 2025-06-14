@@ -9,27 +9,35 @@ class ActionRecorder:
     def __init__(self):
         self.actions: List[Dict[str, Any]] = []
         self.logger = logging.getLogger(__name__)
+        self.base_name: Optional[str] = None  # Used for consistent file naming
 
-    def record_action(self, tool: str, args: Dict[str, Any], command: str) -> None:
+    def record_action(self, tool: str, args: Dict[str, Any], command: str, screenshot_path: Optional[str] = None) -> None:
         self.logger.debug(f"Recording action: {tool} {args}")
         self.actions.append({
             'tool': tool,
             'args': args,
             'command': command,
-            'timestamp': self._get_time()
+            'timestamp': self._get_time(),
+            'screenshot_path': screenshot_path
         })
 
-    def to_json(self, filepath: str) -> None:
+    def to_json(self, filepath: Optional[str] = None) -> str:
+        """Save actions to JSON file using consistent base name if not specified."""
+        if not filepath:
+            if not self.base_name:
+                raise ValueError("Base name not set for action log file.")
+            filepath = str(Path("./generated") / f"{self.base_name}.json")
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(self.actions, f, indent=2)
         self.logger.info(f"Action log saved to {filepath}")
+        return str(Path(filepath).absolute())
 
     def clear(self) -> None:
         self.actions.clear()
 
     async def generate_playwright_script(self, llm, task: str) -> str:
-        """Generate a Playwright script from recorded actions using LLM."""
+        """Generate a Playwright script from recorded actions using LLM and set consistent base name."""
         if not self.actions:
             raise ValueError("No recorded actions found")
         
@@ -61,15 +69,16 @@ class ActionRecorder:
                   "Make sure to include `headless=False` when launching the browser.\n"
                   "Add `asyncio.sleep(0.5)` between actions for better visibility.")
 
-        # Generate a unique output path based on timestamp and prompt/task
+        # Generate a unique output path and base name based on timestamp and prompt/task
         import re
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        # Sanitize task: keep only alphanum/underscore, limit to 8 words
         words = re.findall(r'\w+', task)[:8]
         prompt_snippet = '_'.join(words).lower()
-        filename = f"generated_script_{timestamp}_{prompt_snippet}.py"
+        self.base_name = f"generated_script_{timestamp}_{prompt_snippet}"
+        filename = f"{self.base_name}.py"
         output_path = str(Path("./generated") / filename)
+        self.logger.debug(f"Using base name for files: {self.base_name}")
 
         # Use LLM to generate script
         try:
@@ -90,11 +99,21 @@ class ActionRecorder:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             Path(output_path).write_text(script, encoding='utf-8')
             self.logger.info(f"Playwright script generated at {output_path}")
+            # Save actions to JSON with same base name
+            self.to_json()
             self.clear()
             return str(Path(output_path).absolute())
         except Exception as e:
             self.logger.error(f"Failed to generate Playwright script: {e}")
             raise
+
+    def update_screenshot_path(self, action_index: int, screenshot_path: str) -> None:
+        """Update the screenshot_path for a specific action by index."""
+        if 0 <= action_index < len(self.actions):
+            self.actions[action_index]['screenshot_path'] = screenshot_path
+            self.logger.debug(f"Updated screenshot_path for action {action_index}: {screenshot_path}")
+        else:
+            self.logger.error(f"Invalid action_index {action_index} for screenshot_path update.")
 
     def _get_time(self) -> float:
         import time

@@ -29,6 +29,7 @@ test-results/
 # Project specific
 *.screenshot.png
 *.screenshot.jpg
+generated/
 
 # C extensions
 *.so
