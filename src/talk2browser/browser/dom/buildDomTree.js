@@ -1,3 +1,10 @@
+/*
+ * [INFO] All DOM element highlighting is now performed via CSS classes only:
+ *   - .t2b-element-highlight (dashed border, LLM/context)
+ *   - .t2b-element-highlight-active (solid blue border, Playwright/action)
+ * There are NO overlays, labels, or index painting. Use highlightElements(elements) and clearHighlights(elements).
+ * Legacy highlight logic has been fully removed for performance and maintainability.
+ */
 /**
  * Build DOM Tree Function
  * This function builds a simplified DOM tree from the current page
@@ -26,19 +33,57 @@ window.buildDomTree = (
     current: null
   };
 
-  // Highlights multiple elements with optional focus index
-  function highlightElements(elements, focusIndex = null) {
-    elements.forEach((el, idx) => {
-      try {
-        el.style.outline = (focusIndex !== null && idx === focusIndex)
-          ? "3px solid red"
-          : "2px solid yellow";
-      } catch (e) {
-        // Ignore elements that can't be styled
+  // Inject highlight CSS if not present
+  function injectHighlightStyle() {
+    if (!document.getElementById('t2b-highlight-style')) {
+      const style = document.createElement('style');
+      style.id = 't2b-highlight-style';
+      style.textContent = `
+        .t2b-element-highlight {
+          outline: 1.5px dashed #222 !important;
+          outline-offset: 0px !important;
+          box-shadow: none !important;
+          transition: outline 0.15s;
+        }
+        .t2b-element-highlight-active {
+          outline: 2px solid #007aff !important;
+          outline-offset: 0px !important;
+          box-shadow: none !important;
+          transition: outline 0.15s;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
+  // Highlights multiple elements with minimal dashed border
+  function highlightElements(elements) {
+    injectHighlightStyle();
+    elements.forEach(el => {
+      let domEl = el;
+      // If argument is an object with an xpath property, resolve it
+      if (el && typeof el === "object" && el.xpath) {
+        domEl = document.evaluate(el.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+      }
+      if (domEl) {
+        domEl.classList.add('t2b-element-highlight');
       }
     });
   }
   window.highlightElements = highlightElements;
+
+  // All highlighting now uses CSS classes only. Overlays, labels, and index painting logic have been removed for clarity and maintainability.
+  // Use highlightElements(elements) to add .t2b-element-highlight and clearHighlights(elements) to remove it.
+  // injectHighlightStyle() is always called before adding highlight classes.
+  function clearHighlights(elements) {
+    elements.forEach(el => {
+      if (el) {
+        el.classList.remove('t2b-element-highlight');
+        el.classList.remove('t2b-element-highlight-active');
+      }
+    });
+  }
+  window.clearHighlights = clearHighlights;
 
   function pushTiming(type) {
     TIMING_STACK[type] = TIMING_STACK[type] || [];
@@ -244,20 +289,7 @@ window.buildDomTree = (
   /**
    * Creates a semi-transparent overlay to gray out the page
    */
-  function createPageOverlay() {
-    const overlay = document.createElement('div');
-    overlay.id = 'playwright-page-overlay';
-    overlay.style.position = 'fixed';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100%';
-    overlay.style.height = '100%';
-    overlay.style.pointerEvents = 'none';
-    overlay.style.zIndex = '2147483639';
-    overlay.style.backgroundColor = 'transparent';
-    document.body.appendChild(overlay);
-    return overlay;
-  }
+  // [REMOVED] createPageOverlay: Legacy overlay logic removed. Use only CSS class-based highlighting.
 
   /**
    * Gets a consistent color for an element based on its index
@@ -267,286 +299,14 @@ window.buildDomTree = (
   /**
    * Highlights an element in the DOM and returns the index of the next element.
    */
-  function highlightElement(element, index, parentIframe = null) {
-    pushTiming('highlighting');
-    
-    if (!element) return index;
+  // [REMOVED] highlightElement: Legacy overlay/label highlight logic removed. All highlighting now uses class-based system (.t2b-element-highlight, .t2b-element-highlight-active).
+// Use highlightElements(elements) and clearHighlights(elements) for all highlight operations.
+// No overlays, labels, or index painting remain.
 
-    // Store overlays and the single label for updating
-    const overlays = [];
-    let label = null;
-    let labelWidth = 20;
-    let labelHeight = 16;
-    let cleanupFn = null;
-
-    try {
-      // Create or get highlight container
-      let container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
-      if (!container) {
-        container = document.createElement("div");
-        container.id = HIGHLIGHT_CONTAINER_ID;
-        container.style.position = "fixed";
-        container.style.pointerEvents = "none";
-        container.style.top = "0";
-        container.style.left = "0";
-        container.style.width = "100%";
-        container.style.height = "100%";
-        container.style.zIndex = "2147483640";
-        container.style.backgroundColor = 'transparent';
-        document.body.appendChild(container);
-        
-        // Add page overlay when first creating the container
-        if (!document.getElementById('playwright-page-overlay')) {
-          createPageOverlay();
-        }
-      }
-
-      // Get element client rects
-      const rects = element.getClientRects(); // Use getClientRects()
-
-      if (!rects || rects.length === 0) return index; // Exit if no rects
-
-      // Generate a color based on element's tag and class
-      const getColorKey = (element) => {
-        const tag = element.tagName.toLowerCase();
-        const className = element.className ? String(element.className).split(' ')[0] : '';
-        return `${tag}:${className}`;
-      };
-
-      const colors = [
-        "#FF0000", // Red
-        "#00AA00", // Green
-        "#0000FF", // Blue
-        "#FF8C00", // Dark Orange
-        "#800080", // Purple
-        "#008080", // Teal
-        "#FF69B4", // Pink
-        "#4B0082", // Indigo
-        "#FF4500", // Orange Red
-        "#2E8B57", // Sea Green
-        "#DC143C", // Crimson
-        "#4682B4", // Steel Blue
-      ];
-      
-      // Create a simple hash from the element's tag and class
-      const key = getColorKey(element);
-      let hash = 0;
-      for (let i = 0; i < key.length; i++) {
-        hash = (hash << 5) - hash + key.charCodeAt(i);
-        hash = hash & hash; // Convert to 32bit integer
-      }
-      const colorIndex = Math.abs(hash) % colors.length;
-      const baseColor = colors[colorIndex];
-      const backgroundColor = baseColor + "33"; // 20% opacity
-
-      // Get iframe offset if necessary
-      let iframeOffset = { x: 0, y: 0 };
-      if (parentIframe) {
-        const iframeRect = parentIframe.getBoundingClientRect(); // Keep getBoundingClientRect for iframe offset
-        iframeOffset.x = iframeRect.left;
-        iframeOffset.y = iframeRect.top;
-      }
-
-      // Create fragment to hold overlay elements
-      const fragment = document.createDocumentFragment();
-
-      // Create highlight overlays for each client rect
-      for (const rect of rects) {
-        if (rect.width === 0 || rect.height === 0) continue; // Skip empty rects
-
-        const overlay = document.createElement("div");
-        overlay.style.position = "fixed";
-        overlay.style.border = `2px solid ${baseColor}`;
-        overlay.style.backgroundColor = backgroundColor;
-        overlay.style.pointerEvents = "none";
-        overlay.style.boxSizing = "border-box";
-        overlay.style.borderRadius = '4px';
-        overlay.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.3) inset';
-        overlay.style.transition = 'all 0.2s ease';
-        overlay.style.willChange = 'transform, opacity';
-
-        const top = rect.top + iframeOffset.y;
-        const left = rect.left + iframeOffset.x;
-
-        overlay.style.top = `${top}px`;
-        overlay.style.left = `${left}px`;
-        overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
-
-        fragment.appendChild(overlay);
-        overlays.push({ element: overlay, initialRect: rect }); // Store overlay and its rect
-      }
-
-      // Create and position a single label relative to the first rect
-      const firstRect = rects[0];
-      label = document.createElement("div");
-      label.className = "playwright-highlight-label";
-      label.style.position = "fixed";
-      label.style.background = baseColor;
-      label.style.color = "white";
-      label.style.padding = "2px 6px";
-      label.style.borderRadius = "4px";
-      label.style.fontSize = `${Math.min(12, Math.max(8, firstRect.height / 2))}px`;
-      label.style.fontWeight = "bold";
-      label.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
-      label.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-      label.style.lineHeight = "1.2";
-      label.style.textAlign = "center";
-      label.style.minWidth = "20px";
-      label.style.boxSizing = "border-box";
-      label.style.transition = 'all 0.2s ease';
-      label.textContent = index;
-
-      labelWidth = label.offsetWidth > 0 ? label.offsetWidth : labelWidth; // Update actual width if possible
-      labelHeight = label.offsetHeight > 0 ? label.offsetHeight : labelHeight; // Update actual height if possible
-
-      const firstRectTop = firstRect.top + iframeOffset.y;
-      const firstRectLeft = firstRect.left + iframeOffset.x;
-
-      let labelTop = firstRectTop + 2;
-      let labelLeft = firstRectLeft + firstRect.width - labelWidth - 2;
-
-      // Adjust label position if first rect is too small
-      if (firstRect.width < labelWidth + 4 || firstRect.height < labelHeight + 4) {
-        labelTop = firstRectTop - labelHeight - 2;
-        labelLeft = firstRectLeft + firstRect.width - labelWidth; // Align with right edge
-        if (labelLeft < iframeOffset.x) labelLeft = firstRectLeft; // Prevent going off-left
-      }
-
-      // Ensure label stays within viewport bounds slightly better
-      labelTop = Math.max(0, Math.min(labelTop, window.innerHeight - labelHeight));
-      labelLeft = Math.max(0, Math.min(labelLeft, window.innerWidth - labelWidth));
-
-
-      label.style.top = `${labelTop}px`;
-      label.style.left = `${labelLeft}px`;
-
-      fragment.appendChild(label);
-
-      // Update positions on scroll/resize
-      const updatePositions = () => {
-        const newRects = element.getClientRects(); // Get fresh rects
-        let newIframeOffset = { x: 0, y: 0 };
-
-        if (parentIframe) {
-          const iframeRect = parentIframe.getBoundingClientRect(); // Keep getBoundingClientRect for iframe
-          newIframeOffset.x = iframeRect.left;
-          newIframeOffset.y = iframeRect.top;
-        }
-
-        // Update each overlay
-        overlays.forEach((overlayData, i) => {
-          if (i < newRects.length) { // Check if rect still exists
-            const newRect = newRects[i];
-            const newTop = newRect.top + newIframeOffset.y;
-            const newLeft = newRect.left + newIframeOffset.x;
-
-            overlayData.element.style.top = `${newTop}px`;
-            overlayData.element.style.left = `${newLeft}px`;
-            overlayData.element.style.width = `${newRect.width}px`;
-            overlayData.element.style.height = `${newRect.height}px`;
-            overlayData.element.style.display = (newRect.width === 0 || newRect.height === 0) ? 'none' : 'block';
-          } else {
-            // If fewer rects now, hide extra overlays
-            overlayData.element.style.display = 'none';
-          }
-        });
-
-        // If there are fewer new rects than overlays, hide the extras
-        if (newRects.length < overlays.length) {
-          for (let i = newRects.length; i < overlays.length; i++) {
-            overlays[i].element.style.display = 'none';
-          }
-        }
-
-        // Update label position based on the first new rect
-        if (label && newRects.length > 0) {
-          const firstNewRect = newRects[0];
-          const firstNewRectTop = firstNewRect.top + newIframeOffset.y;
-          const firstNewRectLeft = firstNewRect.left + newIframeOffset.x;
-
-          let newLabelTop = firstNewRectTop + 2;
-          let newLabelLeft = firstNewRectLeft + firstNewRect.width - labelWidth - 2;
-
-          if (firstNewRect.width < labelWidth + 4 || firstNewRect.height < labelHeight + 4) {
-            newLabelTop = firstNewRectTop - labelHeight - 2;
-            newLabelLeft = firstNewRectLeft + firstNewRect.width - labelWidth;
-            if (newLabelLeft < newIframeOffset.x) newLabelLeft = firstNewRectLeft;
-          }
-
-          // Ensure label stays within viewport bounds
-          newLabelTop = Math.max(0, Math.min(newLabelTop, window.innerHeight - labelHeight));
-          newLabelLeft = Math.max(0, Math.min(newLabelLeft, window.innerWidth - labelWidth));
-
-          label.style.top = `${newLabelTop}px`;
-          label.style.left = `${newLabelLeft}px`;
-          label.style.display = 'block';
-        } else if (label) {
-          // Hide label if element has no rects anymore
-          label.style.display = 'none';
-        }
-      };
-
-      const throttleFunction = (func, delay) => {
-        let lastCall = 0;
-        return (...args) => {
-          const now = performance.now();
-          if (now - lastCall < delay) return;
-          lastCall = now;
-          return func(...args);
-        };
-      };
-
-      const throttledUpdatePositions = throttleFunction(updatePositions, 16); // ~60fps
-      window.addEventListener('scroll', throttledUpdatePositions, true);
-      window.addEventListener('resize', throttledUpdatePositions);
-      
-      // Add cleanup function
-      cleanupFn = () => {
-        window.removeEventListener('scroll', throttledUpdatePositions, true);
-        window.removeEventListener('resize', throttledUpdatePositions);
-        // Remove overlay elements if needed
-        overlays.forEach(overlay => overlay.element.remove());
-        if (label) label.remove();
-      };
-      
-      // Then add fragment to container in one operation
-      container.appendChild(fragment);
-      
-      return index + 1;
-    } finally {
-      popTiming('highlighting');
-      // Store cleanup function for later use
-      if (cleanupFn) {
-        // Keep a reference to cleanup functions in a global array
-        (window._highlightCleanupFunctions = window._highlightCleanupFunctions || []).push(cleanupFn);
-      }
-    }
-  }
 
   // Add this function to perform cleanup when needed
-  function cleanupHighlights() {
-    if (window._highlightCleanupFunctions && window._highlightCleanupFunctions.length) {
-      window._highlightCleanupFunctions.forEach(fn => fn());
-      window._highlightCleanupFunctions = [];
-    }
-    
-    // Also remove the container
-    const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
-    if (container) container.remove();
-
-    // Remove page overlay if it exists
-    const overlay = document.getElementById('playwright-page-overlay');
-    if (overlay) {
-      overlay.remove();
-    }
-
-    // Clear any existing timeouts
-    if (cleanupTimeouts.size > 0) {
-      cleanupTimeouts.forEach(clearTimeout);
-      cleanupTimeouts.clear();
-    }
-  }
+  // [REMOVED] cleanupHighlights: Legacy overlay/label cleanup logic removed.
+// No highlight overlays or cleanup functions remain. Use clearHighlights(elements) to remove all highlight classes.
 
   function getElementPosition(currentElement) {
     if (!currentElement.parentElement) {
@@ -1272,13 +1032,6 @@ window.buildDomTree = (
         nodeData.highlightIndex = highlightIndex++;
 
         if (doHighlightElements) {
-          if (focusHighlightIndex >= 0) {
-            if (focusHighlightIndex === nodeData.highlightIndex) {
-              highlightElement(node, nodeData.highlightIndex, parentIframe);
-            }
-          } else {
-            highlightElement(node, nodeData.highlightIndex, parentIframe);
-          }
           return true; // Successfully highlighted
         }
       } else {
@@ -1486,7 +1239,7 @@ window.buildDomTree = (
 
   // After all functions are defined, wrap them with performance measurement
   // Remove buildDomTree from here as we measure it separately
-  highlightElement = measureTime(highlightElement);
+  // highlightElement is fully removed; only class-based highlighting is used.
   isInteractiveElement = measureTime(isInteractiveElement);
   isElementVisible = measureTime(isElementVisible);
   isTopElement = measureTime(isTopElement);

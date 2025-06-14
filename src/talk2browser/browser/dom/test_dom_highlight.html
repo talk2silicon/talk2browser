@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Minimal DOM Highlight Test</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    .test-area { margin-top: 2em; }
+    /* The highlight styles will be injected by JS as well, but here for fallback: */
+    .t2b-element-highlight {
+      outline: 1.5px dashed #222 !important; /* Minimal black dashed border for LLM context */
+      outline-offset: 0px !important;
+      background: none !important;
+      box-shadow: none !important;
+      transition: outline 0.15s;
+    }
+    .t2b-element-highlight-active {
+      outline: 2px solid #007aff !important; /* Solid blue border for Playwright action */
+      outline-offset: 0px !important;
+      background: none !important;
+      box-shadow: none !important;
+      transition: outline 0.15s;
+    }
+  </style>
+  <script src="./buildDomTree.js"></script>
+  <script>
+    // Fallback highlight logic if buildDomTree.js is not loaded or highlightElements not defined
+    function injectHighlightStyle() {
+      if (!document.getElementById('t2b-highlight-style')) {
+        const style = document.createElement('style');
+        style.id = 't2b-highlight-style';
+        style.textContent = `
+          .t2b-element-highlight {
+            outline: 1.5px dashed #222 !important;
+            outline-offset: 0px !important;
+            background: none !important;
+            box-shadow: none !important;
+            transition: outline 0.15s;
+          }
+          .t2b-element-highlight-active {
+            outline: 2px solid #007aff !important;
+            outline-offset: 0px !important;
+            background: none !important;
+            box-shadow: none !important;
+            transition: outline 0.15s;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+    injectHighlightStyle();
+    if (!window.highlightElements) {
+      window.highlightElements = function(elements) {
+        elements.forEach(el => {
+          if (el) el.classList.add('t2b-element-highlight');
+        });
+      };
+    }
+    if (!window.clearHighlights) {
+      window.clearHighlights = function(elements) {
+        elements.forEach(el => {
+          if (el) {
+            el.classList.remove('t2b-element-highlight');
+            el.classList.remove('t2b-element-highlight-active');
+          }
+        });
+      };
+    }
+  </script>
+</head>
+<body>
+  <h1>Minimal DOM Highlight Test</h1>
+  <p>Click the buttons to highlight or clear highlights on the test elements below.</p>
+  <div class="test-area">
+    <input id="search" placeholder="Search or type a command" style="width: 250px;">
+    <button id="searchBtn">Search</button>
+    <select id="dropdown">
+      <option value="option1">Option 1</option>
+      <option value="option2">Option 2</option>
+      <option value="option3">Option 3</option>
+    </select>
+    <label style="margin-left: 1em;">
+      <input type="checkbox" id="toggle1"> Toggle 1
+    </label>
+    <label style="margin-left: 1em;">
+      <input type="checkbox" id="toggle2"> Toggle 2
+    </label>
+    <button id="btn1">Button 1</button>
+    <button id="btn2">Button 2</button>
+    <a href="#" id="link1">A Link</a>
+    <textarea id="textarea1" placeholder="Type something..." rows="2" cols="30"></textarea>
+    <table border="1" style="margin-top:1em; border-collapse:collapse;">
+      <thead>
+        <tr><th>Header 1</th><th>Header 2</th></tr>
+      </thead>
+      <tbody>
+        <tr><td id="cell1">Cell 1</td><td id="cell2">Cell 2</td></tr>
+        <tr><td id="cell3">Cell 3</td><td id="cell4">Cell 4</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:2em;">
+    <button onclick="highlightAll()">Highlight All</button>
+    <button onclick="clearAll()">Clear All</button>
+    <button onclick="highlightActive('input1')">Highlight Active (Input 1)</button>
+    <button onclick="clearActive('input1')">Clear Active (Input 1)</button>
+  </div>
+  <script>
+    function highlightAll() {
+      window.highlightElements([
+        document.getElementById('search'),
+        document.getElementById('searchBtn'),
+        document.getElementById('dropdown'),
+        document.getElementById('toggle1'),
+        document.getElementById('toggle2'),
+        document.getElementById('btn1'),
+        document.getElementById('btn2'),
+        document.getElementById('link1'),
+        document.getElementById('textarea1'),
+        document.getElementById('cell1'),
+        document.getElementById('cell2'),
+        document.getElementById('cell3'),
+        document.getElementById('cell4')
+      ]);
+    }
+    function clearAll() {
+      window.clearHighlights([
+        document.getElementById('search'),
+        document.getElementById('searchBtn'),
+        document.getElementById('dropdown'),
+        document.getElementById('toggle1'),
+        document.getElementById('toggle2'),
+        document.getElementById('btn1'),
+        document.getElementById('btn2'),
+        document.getElementById('link1'),
+        document.getElementById('textarea1'),
+        document.getElementById('cell1'),
+        document.getElementById('cell2'),
+        document.getElementById('cell3'),
+        document.getElementById('cell4')
+      ]);
+    }
+    function highlightActive(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('t2b-element-highlight-active');
+    }
+    function clearActive(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('t2b-element-highlight-active');
+    }
+  </script>
+</body>
+</html>

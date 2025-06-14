@@ -16,16 +16,18 @@ def resolve_hash_args(tool_func):
     async def wrapper(*args, **kwargs):
         logger = logging.getLogger(__name__)
         selector = kwargs.get("selector")
-        # Always fetch the current page for DOMService
         from ..browser.page_manager import PageManager
         browser_page = PageManager.get_instance().get_current_page()
         dom_service = None
         if browser_page and hasattr(browser_page, "get_dom_service"):
             dom_service = browser_page.get_dom_service()
+        logger.info(
+            f"TOOL PARAMS: {tool_func.__name__} called with selector={selector}, browser_page={browser_page}, dom_service={dom_service}"
+        )
         # Only try to resolve if selector is a hash
         if selector and isinstance(selector, str) and selector.startswith("#") and dom_service:
             hash_val = selector
-            logger.debug(f"Attempting to resolve hash selector: {hash_val} using DOMService")
+            logger.info(f"Attempting to resolve hash selector: {hash_val} using DOMService")
             resolved = dom_service.resolve_selector_hash(hash_val)
             if not resolved:
                 logger.error(f"Hash {hash_val} could not be resolved by DOMService.")
@@ -33,7 +35,9 @@ def resolve_hash_args(tool_func):
                 logger.info(f"Resolved hash {hash_val} to selector: {resolved}")
                 kwargs["selector"] = resolved
         else:
-            logger.debug(f"Selector '{selector}' is not a hash, not present, or DOMService unavailable; skipping hash resolution.")
+            logger.info(
+                f"Selector '{selector}' is not a hash, not present, or DOMService unavailable; skipping hash resolution."
+            )
         return await tool_func(*args, **kwargs)
     wrapper._is_browser_tool = True
     return wrapper
@@ -43,45 +47,6 @@ def resolve_hash_args(tool_func):
 
 from ..browser.page_manager import PageManager
 
-@tool
-@resolve_hash_args
-async def get_all_elements(selector: str, attribute: str = "", **kwargs) -> str:
-    """Get a list of text or attribute values for all elements matching the selector on the current browser page.
-    Args:
-        selector: CSS selector
-        attribute: If provided, returns this attribute for each element; otherwise, returns text content.
-    Returns:
-        str: JSON list of values
-    """
-    import logging
-    import json
-    logger = logging.getLogger(__name__)
-    from ..browser.page_manager import PageManager
-    browser_page = PageManager.get_instance().get_current_page()
-    if not browser_page:
-        logger.error("No active browser page found in PageManager.")
-        return "Error: No active browser page."
-    page = browser_page.get_page()
-    logger.info(f"Getting all elements for selector '{selector}' on BrowserPage (url: {getattr(page, 'url', None)})")
-    try:
-        elements = await page.query_selector_all(selector)
-        results = []
-        for el in elements:
-            if attribute:
-                val = await el.get_attribute(attribute)
-            else:
-                val = await el.text_content()
-            results.append(val or "")
-        logger.info(f"Found {len(results)} elements for {selector}")
-        recorder.record_action(
-            tool="get_all_elements",
-            args={"selector": selector, "attribute": attribute},
-            command=f"await page.query_selector_all('{selector}')"
-        )
-        return json.dumps(results)
-    except Exception as e:
-        logger.error(f"Failed to get all elements for {selector}: {e}")
-        return f"Error: {e}"
 
 @tool
 @resolve_hash_args
@@ -94,6 +59,7 @@ async def is_enabled(selector: str, **kwargs) -> bool:
     """
     import logging
     logger = logging.getLogger(__name__)
+    logger.info(f"TOOL CALL: is_enabled(selector={selector}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
@@ -130,6 +96,7 @@ async def get_count(selector: str, **kwargs) -> int:
     """
     import logging
     logger = logging.getLogger(__name__)
+    logger.info(f"TOOL CALL: get_count(selector={selector}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
@@ -196,6 +163,7 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
     """
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
     logger = logging.getLogger(__name__)
+    logger.info(f"TOOL CALL: click(selector={selector}, timeout={timeout}, element_map={element_map})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
@@ -222,22 +190,7 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         error_msg = f"Failed to click {selector}: {e}"
         logger.error(error_msg)
         # Take a screenshot to help with debugging
-        try:
-            import os
-            os.makedirs('./screenshots', exist_ok=True)
-            screenshot_path = f"./screenshots/click_error_{selector}.png"
-            screenshot = await page.screenshot(path=screenshot_path, type='png')
-            logger.debug(f"Screenshot saved to click_error_{selector}.png")
-        except Exception as screenshot_error:
-            logger.error(f"Failed to take screenshot: {screenshot_error}")
-        # Get page HTML for debugging
-        try:
-            html = await page.content()
-            with open(f"click_error_{selector}.html", "w") as f:
-                f.write(html)
-            logger.debug(f"Page HTML saved to click_error_{selector}.html")
-        except Exception as html_error:
-            logger.error(f"Failed to save page HTML: {html_error}")
+        # (error handling now centralized; removed empty try block)
         return f"Error: {error_msg}"
 
 @tool
@@ -251,6 +204,7 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         str: Confirmation message or error details
     """
     logger = logging.getLogger(__name__)
+    logger.info(f"TOOL CALL: fill(selector={selector}, text={text}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
@@ -261,24 +215,31 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         logger.info(f"Attempting to fill field {selector} with text: {text} on BrowserPage (url: {getattr(page, 'url', None)})")
         # If selector looks like an XPath, prefix with 'xpath=' for Playwright
         if selector.startswith('/') or selector.startswith('html/'):
+            xpath = selector
             locator = page.locator(f'xpath={selector}')
         else:
+            xpath = None
             locator = page.locator(selector)
-        await locator.fill(text)
-        logger.info(f"Filled field {selector} with text: {text} on BrowserPage (url: {page.url})")
-        return f"Filled field {selector} with text: {text}"
+        try:
+            await locator.fill(text)
+            logger.info(f"Filled field {selector} with text: {text} on BrowserPage (url: {page.url})")
+            return f"Filled field {selector} with text: {text}"
+        finally:
+            if xpath:
+                # Explicitly fetch dom_service in local scope for finally block
+                dom_service = None
+                if browser_page and hasattr(browser_page, "get_dom_service"):
+                    dom_service = browser_page.get_dom_service()
+                    logger.debug(f"Fetched dom_service in finally block: {dom_service}")
+                if dom_service:
+                    await dom_service.clear_element_action_highlight(xpath)
+                    logger.debug(f"Cleared highlight for element {xpath} after fill action")
+                else:
+                    logger.warning(f"dom_service not available in finally block; could not clear highlight for {xpath}")
     except Exception as e:
         error_msg = f"Failed to fill field {selector}: {str(e)}"
         logger.error(error_msg)
-        # Take a screenshot to help with debugging
-        try:
-            import os
-            os.makedirs('./screenshots', exist_ok=True)
-            screenshot_path = f"./screenshots/click_error_{selector}.png"
-            screenshot = await page.screenshot(path=screenshot_path, type='png')
-            logger.debug(f"Screenshot taken after error and saved to {screenshot_path} (size: {len(screenshot)} bytes)")
-        except Exception as screenshot_error:
-            logger.error(f"Failed to take screenshot: {screenshot_error}")
+        await handle_tool_exception(page, selector, error_msg, logger)
         return f"Error: {error_msg}"
 
 @tool
@@ -288,6 +249,7 @@ async def list_interactive_elements() -> str:
         str: Formatted string containing interactive elements and their details
     """
     logger = logging.getLogger(__name__)
+    logger.info(f"TOOL CALL: list_interactive_elements() called")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
@@ -342,17 +304,9 @@ async def list_interactive_elements() -> str:
             return "No interactive elements found on the page."
         result = ["Interactive elements found on the page:", ""]
         result.extend(elements)
-        # Take a screenshot for reference
-        try:
-            import os
-            os.makedirs('./screenshots', exist_ok=True)
-            screenshot_path = f"./screenshots/list_interactive_elements_{selector if 'selector' in locals() else 'page'}.png"
-            screenshot = await page.screenshot(path=screenshot_path, type='png')
-            logger.debug(f"Page screenshot taken and saved to {screenshot_path} (size: {len(screenshot)} bytes)")
-        except Exception as screenshot_error:
-            logger.error(f"Failed to take screenshot: {screenshot_error}")
         return "\n".join(result)
     except Exception as e:
         error_msg = f"Failed to list interactive elements: {str(e)}"
         logger.error(error_msg)
+        await handle_tool_exception(page, "", error_msg, logger)
         return f"Error: {error_msg}"
