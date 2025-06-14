@@ -22,11 +22,14 @@ from langgraph.prebuilt import ToolNode
 
 from ..browser import PlaywrightClient
 from ..browser.dom.service import DOMService
+from ..browser.page import BrowserPage
+from ..browser.page_manager import PageManager
 from ..tools.browser_tools import (
-    navigate, click, fill, press, select_option, hover, 
-    screenshot, wait_for_selector, get_text, 
-    get_attribute, is_visible, set_page
+    navigate, click, fill, get_all_elements, get_count, is_enabled, list_interactive_elements
 )
+# The following tools are not implemented in browser_tools.py:
+# press, select_option, hover, screenshot, wait_for_selector, get_text, get_attribute, is_visible
+# If needed, re-implement them using the BrowserPage abstraction.
 
 # Configure logging
 logging.basicConfig(
@@ -34,20 +37,20 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+# Suppress noisy HTTP request/response logs from Anthropic client
+logging.getLogger("anthropic._base_client").setLevel(logging.WARNING)
 
 # Define available tools for the agent
+# All tools now expect a BrowserPage argument, which is provided by PageManager
 TOOLS = [
-    navigate, 
-    click, 
-    fill, 
-    press, 
-    select_option, 
-    hover,  
-    wait_for_selector, 
-    get_text, 
-    get_attribute, 
-    is_visible
-    # Do NOT expose evaluate or list_interactive_elements to the LLM
+    navigate,
+    click,
+    fill,
+    get_all_elements,
+    get_count,
+    is_enabled,
+    list_interactive_elements
+    # Add more tools here as they are implemented
 ]
 
 # System prompt template
@@ -91,15 +94,17 @@ class AgentState(TypedDict):
 class BrowserAgent:
     """Agent for browser automation using LangGraph and Playwright."""
     
-    def __init__(self, llm: Optional[ChatAnthropic] = None, headless: bool = False):
+    def __init__(self, llm: Optional[ChatAnthropic] = None, headless: bool = False, info_mode: bool = False):
         """Initialize the browser agent.
         
         Args:
             llm: Optional ChatAnthropic instance. If not provided, a default one will be created.
             headless: Whether to run the browser in headless mode.
+            info_mode: If True, print live story-mode logs (step-by-step narrative)
         """
         self.headless = headless
-        
+        self.info_mode = info_mode
+        self.story_log = []  # Collects story steps if info_mode is enabled
         # Initialize LLM
         self.llm = llm or ChatAnthropic(
             model=os.getenv("CLAUDE_MODEL", "claude-3-opus-20240229"),
@@ -110,10 +115,9 @@ class BrowserAgent:
         # Initialize browser client and DOM service (will be started in __aenter__)
         self.client = PlaywrightClient(headless=headless)
         self.dom_service = None
-        
-        # Initialize graph
+        # Initialize PageManager (singleton)
+        self.page_manager = PageManager.get_instance()
         self.graph = self._create_agent_graph()
-        
         logger.info("BrowserAgent initialized with %s", self.llm.__class__.__name__)
     
     async def __aenter__(self):
@@ -122,35 +126,28 @@ class BrowserAgent:
             # Start the browser
             logger.debug("Starting browser...")
             await self.client.start()
-            
             if not self.client.page:
                 raise RuntimeError("Failed to create browser page")
-            
-            # Wait for page to be fully loaded
             await self.client.page.wait_for_load_state("domcontentloaded")
             await self.client.page.wait_for_load_state("networkidle")
-            
-            # Set up the page for browser tools
-            set_page(self.client.page)
-            
-            # Initialize DOM service
-            logger.info("Initializing DOM service...")
-            self.dom_service = DOMService(self.client.page)
-            
+
+            # Create BrowserPage abstraction and add to PageManager
+            logger.info("Creating initial BrowserPage and DOMService...")
+            browser_page = BrowserPage(self.client.page)
+            self.page_manager.add_page("main", browser_page)
+            logger.info("Initial BrowserPage added to PageManager as 'main'")
+
             # Initial scan for interactive elements
-            logger.info("Performing initial element scan...")
-            elements = await self.dom_service.get_interactive_elements(highlight=True)
-            
-            # Get formatted elements and map
-            elements_str, element_map = self.dom_service.format_elements()
-            logger.info(f"Found {len(elements)} elements, map size: {len(element_map)}")
-            
-            logger.info("Browser and DOM service initialized successfully")
+            logger.info("Performing initial element scan on main BrowserPage...")
+            await browser_page.dom_service.get_interactive_elements(highlight=True)
+            elements_str, element_map = browser_page.dom_service.format_elements()
+            logger.info(f"Initial scan: {len(element_map)} elements mapped on 'main' page.")
+
+            logger.info("Browser, BrowserPage, and DOM service initialized successfully")
             return self
-            
         except Exception as e:
             logger.error("Failed to initialize browser: %s", str(e), exc_info=True)
-            await self.__aexit__(type(e), e, None)  # Clean up on error
+            await self.__aexit__(type(e), e, None)
             raise
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -163,35 +160,24 @@ class BrowserAgent:
                 logger.warning("Error closing browser client: %s", str(e))
     
     def _create_agent_graph(self):
-        """Create the two-node LangGraph for the agent.
-        Uses ToolNode for browser automation tools and chatbot for context management.
-        """
-        logger.info("Creating agent graph with ToolNode")
+        """Create the two-node LangGraph for the agent, using the standard ToolNode."""
+        logger.info("Creating agent graph with standard ToolNode (no custom tool dispatch)")
         workflow = StateGraph(AgentState)
-        
-        # Create tool node with browser tools
-        tool_node = ToolNode(tools=TOOLS)
-        
-        # Add nodes
-        workflow.add_node("chatbot", self._chatbot)  # For context and element scanning
-        workflow.add_node("tools", tool_node)      # For tool execution
-        
-        # Add conditional edges
+        workflow.add_node("agent", self._chatbot)
+        workflow.add_node("tools", ToolNode(TOOLS))
+        # Conditional routing: if _route_tools returns "tools", go to tools, else END
         workflow.add_conditional_edges(
-            "chatbot",
+            "agent",
             self._route_tools,
             {"tools": "tools", END: END}
         )
-        
-        # Any time a tool is called, we return to the chatbot
-        workflow.add_edge("tools", "chatbot")
-        workflow.add_edge(START, "chatbot")
-        
-        # Set entry point to chatbot for initial context gathering
-        workflow.set_entry_point("chatbot")
-        
-        logger.debug("Created agent graph with ToolNode and conditional routing")
-        return workflow.compile()
+        workflow.add_edge("tools", "agent")
+        workflow.set_entry_point("agent")
+        self.graph = workflow.compile()
+        logger.debug("Created agent graph with standard ToolNode and conditional routing")
+        return self.graph
+
+
     
     def _route_tools(self, state: AgentState):
         """Route to tools node if tool calls are present, otherwise end."""
@@ -207,7 +193,7 @@ class BrowserAgent:
         )
         
         # Limit maximum tool calls
-        MAX_TOOL_CALLS = 10
+        MAX_TOOL_CALLS = 4
         if tool_call_count >= MAX_TOOL_CALLS:
             logger.warning(f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation")
             return END
@@ -218,6 +204,27 @@ class BrowserAgent:
         
         # No tool calls
         return END
+
+    # --- PageManager integration methods ---
+    def create_new_page(self, page_id: str, playwright_page):
+        """Create and add a new BrowserPage to the PageManager."""
+        browser_page = BrowserPage(playwright_page)
+        self.page_manager.add_page(page_id, browser_page)
+        logger.info(f"Created and added new BrowserPage with id {page_id}")
+
+    def switch_page(self, page_id: str):
+        """Switch to a different BrowserPage by id."""
+        page = self.page_manager.switch_to(page_id)
+        if page:
+            logger.info(f"Switched to BrowserPage with id {page_id}")
+        else:
+            logger.error(f"Failed to switch to BrowserPage with id {page_id}")
+
+    def close_page(self, page_id: str):
+        """Close and remove a BrowserPage by id."""
+        self.page_manager.close_page(page_id)
+        logger.info(f"Closed BrowserPage with id {page_id}")
+    # --- End PageManager integration ---
 
     
     async def _chatbot(self, state: AgentState) -> AgentState:
@@ -236,27 +243,44 @@ class BrowserAgent:
             # Get interactive elements if DOM service is available
             elements_context = ""
             element_map = {}
-            
-            if self.dom_service:
+
+            # Always fetch the current DOM service from the current page (singleton)
+            from ..browser.page_manager import PageManager
+            browser_page = PageManager.get_instance().get_current_page()
+            dom_service = browser_page.get_dom_service() if browser_page else None
+
+            if dom_service:
                 try:
                     # Refresh interactive elements
                     logger.info("Refreshing interactive elements...")
-                    await self.dom_service.get_interactive_elements(highlight=True)
-                    
+                    await dom_service.get_interactive_elements(highlight=True)
+
                     # Get formatted elements and map
-                    elements_context, element_map = self.dom_service.format_elements()
+                    elements_context, element_map = dom_service.format_elements()
                     logger.info(f"Retrieved {len(element_map)} interactive elements")
-                    
-                    # Add element map to state for tools
-                    state["element_map"] = element_map
-                    logger.debug(f"Added element map to state")
-                    
+
+                    # Overwrite element map in state for tools (removes any previous map)
+                    state["element_map"] = element_map  # Always latest
+                    logger.debug(f"[Agent] Overwrote element_map in state with {len(element_map)} elements")
+
+                    if self.info_mode:
+                        step = f"Step: Inspected the page for interactive elements.\n  → Found elements:\n{elements_context}"
+                        print(step)
+                        self.story_log.append(step)
                 except Exception as e:
                     logger.error(f"Error getting interactive elements: {e}", exc_info=True)
                     elements_context = f"Error scanning elements: {str(e)}"
+                    if self.info_mode:
+                        step = f"Step: Failed to scan elements due to error: {str(e)}"
+                        print(step)
+                        self.story_log.append(step)
             else:
                 logger.warning("No DOM service available")
                 elements_context = "DOM service not initialized"
+                if self.info_mode:
+                    step = "Step: DOM service not initialized. Skipping element scan."
+                    print(step)
+                    self.story_log.append(step)
             
             # Build context for LLM
             context = [
@@ -264,14 +288,22 @@ class BrowserAgent:
                 f"Page title: {current_title}",
                 elements_context
             ]
-            
+            # Build a human-readable element hash map section
+            if element_map:
+                element_map_section = ["\n## Interactive Elements (hash → description):"]
+                for h, desc in element_map.items():
+                    element_map_section.append(f"- {h}: {desc}")
+                element_map_section.append("\n**Only use these hashes in your tool calls.**")
+                element_map_str = "\n".join(element_map_section)
+            else:
+                element_map_str = "\n(No interactive elements detected on this page.)"
             # Create system message content
             system_content = "\n\n".join([
                 SYSTEM_PROMPT,
                 "Current page state:",
-                "\n".join(context)
+                "\n".join(context),
+                element_map_str
             ])
-            
             # Find and update existing system message or insert at start
             system_found = False
             for i, msg in enumerate(messages):
@@ -279,7 +311,6 @@ class BrowserAgent:
                     messages[i] = SystemMessage(content=system_content)
                     system_found = True
                     break
-            
             if not system_found:
                 messages.insert(0, SystemMessage(content=system_content))
             
@@ -288,6 +319,13 @@ class BrowserAgent:
             # Bind static tools to the LLM and get response
             llm_with_tools = self.llm.bind_tools(TOOLS)
             response = await llm_with_tools.ainvoke(messages)
+            
+            # Info mode: log tool selection step
+            if self.info_mode and hasattr(response, 'tool_calls') and response.tool_calls:
+                tools_used = [call['name'] if isinstance(call, dict) else getattr(call, 'name', str(call)) for call in response.tool_calls]
+                step = f"Step: LLM decided to use tool(s): {', '.join(tools_used)}"
+                print(step)
+                self.story_log.append(step)
             
             # Check if response has tool calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
@@ -299,6 +337,10 @@ class BrowserAgent:
             
             # No tool calls, end the conversation
             logger.info("No tool calls in LLM response, ending conversation")
+            if self.info_mode:
+                step = "Step: No further tool actions needed. Conversation ending."
+                print(step)
+                self.story_log.append(step)
             return {
                 "messages": messages + [response],
                 "next": END
@@ -352,6 +394,13 @@ class BrowserAgent:
                     task=task
                 )
                 logger.info(f"Generated Playwright script: {script_path}")
+                # Info mode: print final story summary
+                if self.info_mode:
+                    print("\n[INFO MODE: Step-by-Step Story]")
+                    print(f"Prompt: {task}")
+                    for i, step in enumerate(self.story_log, 1):
+                        print(f"Step {i}: {step}")
+                    print("[END OF STORY]\n")
             except Exception as final_exc:
                 logger.error(f"Failed to generate script or log: {final_exc}")
             # --- End final block ---

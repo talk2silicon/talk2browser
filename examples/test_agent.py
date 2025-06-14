@@ -1,22 +1,29 @@
 """Test script for the BrowserAgent with Sauce Demo login example."""
-import logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 import asyncio
 import logging
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+from talk2browser.utils.logging import setup_logging
+from talk2browser.agent.agent import BrowserAgent
+
+# Load environment variables from .env
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Set up logging from LOG_LEVEL in .env
+level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+level = getattr(logging, level_str, logging.INFO)
+setup_logging(level=level)
 
-from talk2browser.agent.agent import BrowserAgent
+# Suppress noisy DEBUG logs from external libraries unless LOG_LEVEL is DEBUG
+if level > logging.DEBUG:
+    logging.getLogger("anthropic").setLevel(logging.INFO)
+    logging.getLogger("httpcore").setLevel(logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.INFO)
+
+TASK = """
+Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
+"""
 
 async def main():
     """Test the BrowserAgent with a Sauce Demo login flow."""
@@ -37,6 +44,11 @@ async def main():
             response = await agent.run(
                 "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce and then buy Sauce Labs Backpack"
             )
+
+            # response = await agent.run(
+            #     TASK
+            # )
+ 
             print("\nAgent response:")
             print(response)
             

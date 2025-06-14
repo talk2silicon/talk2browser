@@ -505,7 +505,24 @@ class DOMService:
         return elements_context, self.get_element_map()
 
     def get_element_map(self) -> Dict[str, str]:
-        """Get the current element map."""
+        """Get the current element map (for debugging only; avoid external use)."""
         if not self._element_map:
             logger.warning("Element map is empty")
         return self._element_map.copy()  # Return a copy to prevent external modification
+
+    def resolve_selector_hash(self, hash_val: str) -> str | None:
+        """
+        Resolve a hash value to a selector using the internal element map.
+        Args:
+            hash_val: The hash string (with or without # prefix)
+        Returns:
+            The resolved selector string, or None if not found
+        """
+        # Accept both '#abc123' and 'abc123'
+        clean_hash = hash_val[1:] if hash_val.startswith('#') else hash_val
+        for key, selector in self._element_map.items():
+            if key.lstrip('#') == clean_hash:
+                logger.debug(f"Resolved selector hash {hash_val} to: {selector}")
+                return selector
+        logger.error(f"Could not resolve selector hash: {hash_val}")
+        return None
