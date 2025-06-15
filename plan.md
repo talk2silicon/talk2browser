@@ -8,6 +8,7 @@ Build a self-improving browser automation system for testing a specific web appl
 - **Removed:** `.t2b-element-highlight-active` CSS, `highlight_element_for_action`, and `clear_element_action_highlight` from DOMService and all tool functions.
 - **Preserved:** `.t2b-element-highlight` for context highlighting (dashed border), with no background override (original element colors preserved).
 - **Current plan and task list updated for continuity after IDE restart.**
+- **Selenium script generation and agent debugging plan saved for future reference.**
 
 ## Current Working Plan
 ### Browser Automation Refactor Plan

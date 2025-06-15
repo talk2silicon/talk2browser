@@ -90,15 +90,18 @@ class ActionRecorder:
             'screenshot_path': screenshot_path
         })
 
-    def to_json(self, filepath: Optional[str] = None) -> str:
-        """Save actions to JSON file using consistent base name if not specified."""
+    def to_json(self, filepath: Optional[str] = None, scenario_name: Optional[str] = None) -> str:
+        """Save actions to JSON file using consistent base name if not specified.
+        If scenario_name is provided, save as {"scenario_name": ..., "actions": [...]}.
+        """
         if not filepath:
             if not self.base_name:
                 raise ValueError("Base name not set for action log file.")
             filepath = str(Path("./generated") / f"{self.base_name}.json")
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        data = {"scenario_name": scenario_name, "actions": self.actions} if scenario_name else self.actions
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(self.actions, f, indent=2)
+            json.dump(data, f, indent=2)
         self.logger.info(f"Action log saved to {filepath}")
         return str(Path(filepath).absolute())
 

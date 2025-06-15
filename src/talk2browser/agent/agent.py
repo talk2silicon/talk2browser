@@ -24,12 +24,10 @@ from ..browser import PlaywrightClient
 from ..browser.dom.service import DOMService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
-from ..tools.browser_tools import (
-    navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html
+from ..tools import (
+    navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html,
+    generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder
 )
-# The following tools are not implemented in browser_tools.py:
-# press, select_option, hover, screenshot, wait_for_selector, get_text, get_attribute, is_visible
-# If needed, re-implement them using the BrowserPage abstraction.
 
 # Configure logging
 logging.basicConfig(
@@ -41,7 +39,6 @@ logger = logging.getLogger(__name__)
 logging.getLogger("anthropic._base_client").setLevel(logging.WARNING)
 
 # Define available tools for the agent
-# All tools now expect a BrowserPage argument, which is provided by PageManager
 TOOLS = [
     navigate,
     click,
@@ -49,9 +46,15 @@ TOOLS = [
     get_count,
     is_enabled,
     list_interactive_elements,
-    generate_pdf_from_html
-    # Add more tools here as they are implemented
+    generate_pdf_from_html,
+    generate_script,
+    generate_negative_tests,
+    replay_action_json_with_playwright,
+    list_files_in_folder
 ]
+def _tool_display_name(tool):
+    return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
+logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
 
 # System prompt template
 SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
@@ -111,6 +114,8 @@ class BrowserAgent:
             temperature=0.0,
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
+        from .llm_singleton import set_llm
+        set_llm(self.llm)
         
         # Initialize browser client and DOM service (will be started in __aenter__)
         self.client = PlaywrightClient(headless=headless)
@@ -382,28 +387,17 @@ class BrowserAgent:
             response = last_message.content if hasattr(last_message, 'content') else str(last_message)
             logger.info("Agent task completed")
 
-            # --- Final block: generate script and JSON log ---
+            # --- Final block: save action JSON with scenario_name ---
             try:
                 from .action_recorder_singleton import recorder  # Use relative import
                 import os
+                import re
                 os.makedirs("./generated", exist_ok=True)
-                recorder.to_json("./generated/actions.json")
-                logger.info("Action log saved to ./generated/actions.json")
-                # Switched to Cypress script generation (Playwright generation disabled)
-                script_path = await recorder.generate_cypress_script(
-                    llm=self.llm,
-                    task=task
-                )
-                logger.info(f"Generated Cypress script: {script_path}")
-                # Info mode: print final story summary
-                if self.info_mode:
-                    print("\n[INFO MODE: Step-by-Step Story]")
-                    print(f"Prompt: {task}")
-                    for i, step in enumerate(self.story_log, 1):
-                        print(f"Step {i}: {step}")
-                    print("[END OF STORY]\n")
+                scenario_name = re.sub(r'[^a-zA-Z0-9_]', '_', task.lower().split()[0]) if task else "scenario"
+                recorder.to_json(f"./generated/actions_{scenario_name}.json", scenario_name=scenario_name)
+                logger.info(f"Action log saved to ./generated/actions_{scenario_name}.json")
             except Exception as final_exc:
-                logger.error(f"Failed to generate script or log: {final_exc}")
+                logger.error(f"Failed to save action log: {final_exc}")
             # --- End final block ---
 
             return response

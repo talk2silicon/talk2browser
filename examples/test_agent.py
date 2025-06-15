@@ -46,7 +46,7 @@ async def main():
             # )
 
             response = await agent.run(
-                "Navigate to the https://browser.windsurf.com and summarize and create a pdf file"
+                "Navigate to the https://browser.windsurf.com and create a selenium script"
             )
 
             # response = await agent.run(
