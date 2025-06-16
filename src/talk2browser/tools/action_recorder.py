@@ -19,7 +19,16 @@ class ActionRecorder:
         # Format actions for the prompt
         formatted_actions = []
         for i, action in enumerate(self.actions, 1):
-            formatted_actions.append(f"{i}. {action['command']}")
+            action_type = action['type']
+        args = action['args']
+        if action_type == 'navigate':
+            formatted_actions.append(f"{i}. navigate to {args.get('url', '<missing url>')}")
+        elif action_type == 'click':
+            formatted_actions.append(f"{i}. click {args.get('selector', '<missing selector>')}")
+        elif action_type == 'fill':
+            formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('value', '<missing value>')}")
+        else:
+            formatted_actions.append(f"{i}. {action_type} {args}")
 
         # Cypress LLM Prompt
         prompt = (
@@ -80,12 +89,15 @@ class ActionRecorder:
             self.logger.error(f"Failed to generate Cypress script: {e}")
             raise
 
-    def record_action(self, tool: str, args: Dict[str, Any], command: str, screenshot_path: Optional[str] = None) -> None:
+    def record_action(self, tool: str, args: Dict[str, Any], command: str = "", screenshot_path: Optional[str] = None) -> None:
+        """
+        Record a backend-agnostic action (for replay and script generation).
+        Only 'type', 'args', 'timestamp', and 'screenshot_path' are stored.
+        """
         self.logger.debug(f"Recording action: {tool} {args}")
         self.actions.append({
-            'tool': tool,
+            'type': tool,  # Use 'type' for replay compatibility
             'args': args,
-            'command': command,
             'timestamp': self._get_time(),
             'screenshot_path': screenshot_path
         })
@@ -116,7 +128,16 @@ class ActionRecorder:
         # Format actions for the prompt
         formatted_actions = []
         for i, action in enumerate(self.actions, 1):
-            formatted_actions.append(f"{i}. {action['command']}")
+            action_type = action['type']
+        args = action['args']
+        if action_type == 'navigate':
+            formatted_actions.append(f"{i}. navigate to {args.get('url', '<missing url>')}")
+        elif action_type == 'click':
+            formatted_actions.append(f"{i}. click {args.get('selector', '<missing selector>')}")
+        elif action_type == 'fill':
+            formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('value', '<missing value>')}")
+        else:
+            formatted_actions.append(f"{i}. {action_type} {args}")
 
         # Prompt for LLM
         prompt = ("You are an expert at writing Playwright scripts.\n"

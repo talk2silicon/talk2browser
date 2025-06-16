@@ -134,40 +134,53 @@ def generate_negative_tests(language: str, prompt: str) -> List[str]:
     return [script_path]
 
 @tool
-def replay_action_json_with_playwright(action_json_path: str, headless: bool = True) -> str:
+def replay_action_json_with_playwright(action_json_path: str, headless: bool = False) -> str:
     """
-    Replay a workflow from an action JSON using Playwright.
+    Backend-agnostic replay of browser actions from a JSON file using Playwright.
+    Only 'type' and 'args' fields are required in each action.
     Args:
         action_json_path: Path to the action JSON file.
-        headless: Run browser in headless mode (default True).
+        headless: Run browser in headless mode (default False).
     Returns:
         Result summary string.
     """
     from playwright.sync_api import sync_playwright
     import time
+    logger.info(f"[REPLAY] Launching Playwright with headless={headless}")
     if not os.path.isfile(action_json_path):
         logger.error(f"Action JSON not found: {action_json_path}")
         raise FileNotFoundError(f"Action JSON not found: {action_json_path}")
     with open(action_json_path) as f:
         data = json.load(f)
     actions = data['actions'] if 'actions' in data else data
-    logger.info(f"Replaying {len(actions)} actions from {action_json_path}")
+    logger.info(f"[REPLAY] Replaying {len(actions)} actions from {action_json_path}")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         page = browser.new_page()
         for idx, action in enumerate(actions):
             try:
-                if action['type'] == 'navigate':
-                    page.goto(action['url'])
-                elif action['type'] == 'click':
-                    page.click(action['selector'])
-                elif action['type'] == 'fill':
-                    page.fill(action['selector'], action['value'])
+                if not isinstance(action, dict) or 'type' not in action or 'args' not in action:
+                    logger.error(f"Malformed action at index {idx}: {action} - missing 'type' or 'args' field.")
+                    browser.close()
+                    return f"Error: Malformed action at index {idx}: {action} - missing 'type' or 'args' field. Please ensure all actions are valid and include 'type' and 'args' keys."
+                action_type = action['type']
+                args = action['args']
+                logger.debug(f"[REPLAY] Action {idx}: type={action_type}, args={args}")
+                if action_type == 'navigate':
+                    page.goto(args['url'])
+                elif action_type == 'click':
+                    page.click(args['selector'])
+                elif action_type == 'fill':
+                    page.fill(args['selector'], args['value'])
+                else:
+                    logger.error(f"Unknown action type at index {idx}: {action_type}")
+                    browser.close()
+                    return f"Error: Unknown action type '{action_type}' at index {idx}."
                 time.sleep(0.5)
             except Exception as e:
                 logger.error(f"Failed on action {idx}: {action} - {e}")
                 browser.close()
-                return f"Failed on action {idx}: {action} - {e}"
+                return f"Error: Failed on action {idx}: {action} - {e}"
         browser.close()
     return f"Successfully replayed {len(actions)} actions from {action_json_path}"
 

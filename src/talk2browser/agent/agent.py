@@ -87,6 +87,9 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser
 - If an element is not found, check for iframes, modals, or dynamic content
 - If a page doesn't load, try refreshing or going back and retrying
 - If stuck, analyze the page structure and try a different approach
+
+## Action Replay Strictness:
+- When the user requests to replay an action JSON file, ONLY call the replay tool. If the replay fails, report the error and do not attempt to generate scripts or take additional actions unless the user explicitly requests them.
 """
 
 class AgentState(TypedDict):
@@ -110,7 +113,7 @@ class BrowserAgent:
         self.story_log = []  # Collects story steps if info_mode is enabled
         # Initialize LLM
         self.llm = llm or ChatAnthropic(
-            model=os.getenv("CLAUDE_MODEL", "claude-3-opus-20240229"),
+            model=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
             temperature=0.0,
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )

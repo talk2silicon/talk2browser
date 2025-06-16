@@ -50,7 +50,7 @@ async def main():
             # )
 
             response = await agent.run(
-                "read and replay the action json file in ./generated/actions_read.json"
+                "read and replay the action json file in ./generated/actions_navigate.json"
             )
 
 
