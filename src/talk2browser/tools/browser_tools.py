@@ -6,9 +6,9 @@ from playwright.async_api import Page
 from langchain.tools import tool
 
 # Action recorder singleton import (shared across modules)
-from ..agent.action_recorder_singleton import recorder
+
 import logging
-logging.getLogger(__name__).debug("Imported shared recorder singleton from agent.action_recorder_singleton")
+
 
 # Decorator to resolve hash arguments using element_map
 import functools
@@ -36,25 +36,24 @@ def normalize_selector(selector: str, logger=None) -> str:
     return selector
 
 # --- Centralized Screenshot Utility for User Actions ---
-async def capture_and_record_screenshot(page, tool_name, logger, recorder, success=True):
+async def capture_screenshot_for_action(page, tool_name: str, logger, success=True) -> Optional[str]:
     """
-    Capture a screenshot for user actions, save it with a consistent name, and update the recorder.
+    Capture a screenshot for user actions, save it with a consistent name, and return the path.
     Args:
         page: Playwright Page object
         tool_name: Name of the tool/action (str)
         logger: Logger instance
-        recorder: ActionRecorder instance
         success: Whether the action succeeded (bool)
+    Returns:
+        str: Path to the screenshot, or None if failed
     """
     try:
         from pathlib import Path
-        action_idx = len(recorder.actions) - 1
-        base_name = recorder.base_name or "step"
+        base_name = "step"
         status = "success" if success else "fail"
-        screenshot_path = str(Path("./generated") / f"{base_name}_step{action_idx}_{tool_name}_{status}.png")
+        screenshot_path = str(Path("./generated") / f"{base_name}_{tool_name}_{status}.png")
         logger.debug(f"Attempting to save screenshot for action {tool_name} at {screenshot_path}")
         await page.screenshot(path=screenshot_path, full_page=True)
-        recorder.update_screenshot_path(action_idx, screenshot_path)
         logger.info(f"Screenshot saved to {screenshot_path} for {tool_name} (success={success})")
         return screenshot_path
     except Exception as e:
@@ -126,12 +125,13 @@ async def is_enabled(selector: str, **kwargs) -> bool:
         disabled = await el.get_attribute("disabled")
         enabled = disabled is None
         logger.info(f"Element {selector} enabled: {enabled}")
-        recorder.record_action(
-            tool="is_enabled",
-            args={"selector": selector},
-            command=f"await page.query_selector('{selector}').get_attribute('disabled')"
-        )
-        
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "is_enabled",
+            "args": {"selector": selector},
+            "result": enabled
+        }
+        ActionService.get_instance().record_agent_action(action_data)
         return enabled
     except Exception as e:
         logger.error(f"Failed to check enabled for {selector}: {e}")
@@ -193,12 +193,14 @@ async def navigate(url: str) -> str:
     logger.info(f"Navigating BrowserPage (url before: {getattr(page, 'url', None)}) to {url}")
     await page.goto(url)
     title = await page.title()
-    recorder.record_action(
-        tool="navigate",
-        args={"url": url},
-        command=f"await page.goto('{url}')"
-    )
-    await capture_and_record_screenshot(page, "navigate", logger, recorder, success=True)
+    from ..services.action_service import ActionService
+    screenshot_path = await capture_screenshot_for_action(page, "navigate", logger, success=True)
+    action_data = {
+        "type": "navigate",
+        "args": {"url": url},
+        "screenshot": screenshot_path
+    }
+    ActionService.get_instance().record_agent_action(action_data)
     logger.info(f"Navigated to {url}. Page title: {title}")
     return f"Navigated to {url}. Page title: {title}"
 
@@ -498,11 +500,6 @@ def generate_pdf_from_html(html: str, path: str = None) -> str:
     from pathlib import Path
     from datetime import datetime
     from playwright.async_api import async_playwright
-    # Import recorder from action_recorder if available
-    try:
-        from .action_recorder import recorder
-    except ImportError:
-        recorder = None
 
     logger = logging.getLogger(__name__)
     logger.info("TOOL CALL: generate_pdf_from_html() called")

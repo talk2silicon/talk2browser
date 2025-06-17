@@ -1,102 +1,49 @@
-import os
-import json
 import logging
-from typing import Optional, List
+from typing import Optional, List, Any
+import json
+import os
 from langchain_core.tools import tool
-from ..agent.action_recorder_singleton import recorder
+# Use singleton getter everywhere; do not instantiate directly.
 from langchain_anthropic import ChatAnthropic
 from ..agent.llm_singleton import get_llm
+from ..services.action_service import ActionService
+
+action_service = ActionService.get_instance()
 
 logger = logging.getLogger(__name__)
+
+
+
 
 @tool
 def generate_script(language: str, task: str, prompt: Optional[str] = None) -> str:
     """
-    Generate a test script (Playwright, Cypress, Selenium, etc.) from the in-memory recorded actions.
+    Generate a test script (Playwright, Cypress, Selenium, etc.) from the merged actions (manual+agent) in ActionService.
     Args:
         language: The target automation framework ('playwright', 'cypress', 'selenium').
         task: The scenario/task description.
-        prompt: Optional, custom LLM prompt.
+        prompt: Optional, custom LLM prompt (ignored; now handled by ScriptGenerationService).
     Returns:
         Path to the generated script file.
     """
-    actions = recorder.actions
+    from ..services.script_generation_service import ScriptGenerationService
+    actions = action_service.get_merged_actions()
     if not actions:
-        logger.error("No actions recorded in memory for script generation.")
-        raise ValueError("No actions recorded.")
-
-    # Choose prompt template
-    if prompt:
-        llm_prompt = prompt
-    else:
-        if language.lower() == 'playwright':
-            llm_prompt = (
-                "Generate a Playwright Python script for the following scenario: "
-                f"{task}\nActions: {json.dumps(actions, indent=2)}\n"
-                "Only output the code, no markdown or explanation."
-            )
-        elif language.lower() == 'cypress':
-            llm_prompt = (
-                "Generate a Cypress JavaScript test script for the following scenario: "
-                f"{task}\nActions: {json.dumps(actions, indent=2)}\n"
-                "Only output the code, no markdown or explanation."
-            )
-        elif language.lower() == 'selenium':
-            llm_prompt = (
-                "Generate a Selenium Python script for the following scenario: "
-                f"{task}\nActions: {json.dumps(actions, indent=2)}\n"
-                "Only output the code, no markdown or explanation."
-            )
-        else:
-            logger.error(f"Unsupported language: {language}")
-            raise ValueError(f"Unsupported language: {language}")
-
+        logger.error("No merged actions available in ActionService for script generation.")
+        raise ValueError("No merged actions available.")
     llm = get_llm()
-    logger.info(f"[GEN_SCRIPT] Calling LLM to generate {language} script for scenario: {task}")
-    logger.debug(f"[GEN_SCRIPT] Actions for script generation: {json.dumps(actions, indent=2)}")
-    logger.debug(f"[GEN_SCRIPT] LLM prompt: {llm_prompt}")
-
-    try:
-        response = llm.invoke(llm_prompt)
-        logger.debug(f"[GEN_SCRIPT] LLM response (first 200 chars): {repr(response)[:200]}")
-    except Exception as e:
-        logger.error(f"[GEN_SCRIPT] Error during LLM script generation: {e}", exc_info=True)
-        response = None
-
-    safe_task = task.lower().replace(' ', '_').replace('/', '_')[:40]
-    script_ext = {
-        'playwright': 'py',
-        'cypress': 'cy.js',
-        'selenium': 'selenium.py'
-    }.get(language.lower(), 'txt')
-    script_path = os.path.join('generated', f"generated_script_{safe_task}.{script_ext}")
-
-    # Ensure output directory exists before saving
-    # Extract string content from LLM response if needed
-    script_content = response
-    if not isinstance(response, str):
-        # Try extracting .content or .text for known message types
-        script_content = getattr(response, 'content', None) or getattr(response, 'text', None)
-        if script_content is None:
-            logger.error(f"[GEN_SCRIPT] LLM response is not a string and has no .content/.text attribute. Type: {type(response)}. Value: {repr(response)}")
-            return None
-        logger.debug(f"[GEN_SCRIPT] Extracted script content from response object: {type(response)}")
-
-    try:
-        os.makedirs(os.path.dirname(script_path), exist_ok=True)
-        logger.info(f"[GEN_SCRIPT] Saving script to {script_path}")
-        logger.debug(f"[GEN_SCRIPT] Script content (first 200 chars): {repr(script_content)[:200]}")
-        if script_content and script_content.strip():
-            with open(script_path, 'w') as f:
-                f.write(script_content)
-            logger.info(f"[GEN_SCRIPT] Generated {language} script saved to {script_path}")
-            return script_path
-        else:
-            logger.error(f"[GEN_SCRIPT] Script generation failed or returned empty response. Script not saved for scenario '{task}'.")
-            return None
-    except Exception as file_exc:
-        logger.error(f"[GEN_SCRIPT] Failed to save script to {script_path}: {file_exc}")
-        return None
+    script_service = ScriptGenerationService(llm=llm)
+    logger.info(f"[ScriptTools] Generating {language} script for scenario: {task}")
+    logger.debug(f"[ScriptTools] Actions for script generation: {json.dumps(actions, indent=2)}")
+    if language.lower() == 'playwright':
+        import asyncio
+        return asyncio.run(script_service.generate_playwright_script(actions, task))
+    elif language.lower() == 'cypress':
+        import asyncio
+        return asyncio.run(script_service.generate_cypress_script(actions, task))
+    else:
+        logger.error(f"Unsupported language: {language}")
+        raise ValueError(f"Unsupported language: {language}")
 
 
 @tool
@@ -109,7 +56,7 @@ def generate_negative_tests(language: str, prompt: str) -> List[str]:
     Returns:
         List of paths to generated negative test scripts.
     """
-    actions = recorder.actions
+    actions = action_service.get_agent_actions()
     if not actions:
         logger.error("No actions recorded in memory for negative test generation.")
         raise ValueError("No actions recorded.")

@@ -22,6 +22,7 @@ from langgraph.prebuilt import ToolNode
 
 from ..browser import PlaywrightClient
 from ..browser.dom.service import DOMService
+from ..services.manual_mode_service import ManualModeService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
@@ -54,6 +55,15 @@ TOOLS = [
 ]
 def _tool_display_name(tool):
     return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
+def log_registered_tools():
+    tool_info = []
+    for tool in TOOLS:
+        name = _tool_display_name(tool)
+        doc = getattr(tool, '__doc__', '')
+        tool_info.append(f"- {name}: {doc.strip().splitlines()[0] if doc else 'No docstring'}")
+    logger.info("Registered tools (detailed):\n" + "\n".join(tool_info))
+
+log_registered_tools()
 logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
 
 # System prompt template
@@ -123,6 +133,7 @@ class BrowserAgent:
         # Initialize browser client and DOM service (will be started in __aenter__)
         self.client = PlaywrightClient(headless=headless)
         self.dom_service = None
+        self.manual_mode_service = None
         # Initialize PageManager (singleton)
         self.page_manager = PageManager.get_instance()
         self.graph = self._create_agent_graph()
@@ -142,6 +153,19 @@ class BrowserAgent:
             # Create BrowserPage abstraction and add to PageManager
             logger.info("Creating initial BrowserPage and DOMService...")
             browser_page = BrowserPage(self.client.page)
+            self.dom_service = browser_page.dom_service
+            # --- Inject manual override UI JS ---
+            try:
+                from talk2browser.browser.manual_override_injector import inject_manual_override
+                logger.info("Injecting manual_override.js for manual mode UI...")
+                await inject_manual_override(self.client.page)
+                logger.info("manual_override.js injected successfully.")
+            except Exception as inject_exc:
+                logger.error(f"Failed to inject manual_override.js: {inject_exc}", exc_info=True)
+            # Instantiate ManualModeService with DOMService
+            self.manual_mode_service = ManualModeService(dom_service=self.dom_service)
+            # Expose mode change handler to Playwright
+            await self.manual_mode_service.expose_mode_change_handler(self.client.page)
             self.page_manager.add_page("main", browser_page)
             logger.info("Initial BrowserPage added to PageManager as 'main'")
 
@@ -239,6 +263,9 @@ class BrowserAgent:
         """Process messages with LLM and determine next step with full context.
         Handles page state, interactive elements, and LLM interaction.
         """
+        # Pause if manual mode is active
+        if self.manual_mode_service:
+            await self.manual_mode_service.wait_if_manual_mode()
         messages = state["messages"]
         
         try:
@@ -377,32 +404,32 @@ class BrowserAgent:
                 messages=[HumanMessage(content=task)],
                 next="agent"
             )
-            
             # Run the graph
             logger.info(f"Starting agent with task: {task}")
             result = await self.graph.ainvoke(initial_state)
-            
             # Get final response
             messages = result["messages"]
             last_message = messages[-1]
-            
             # Extract content from last message
             response = last_message.content if hasattr(last_message, 'content') else str(last_message)
             logger.info("Agent task completed")
-
-            # --- Final block: save action JSON with scenario_name ---
+            # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
-                from .action_recorder_singleton import recorder  # Use relative import
                 import os
                 import re
+                from ..services.action_service import ActionService
                 os.makedirs("./generated", exist_ok=True)
                 scenario_name = re.sub(r'[^a-zA-Z0-9_]', '_', task.lower().split()[0]) if task else "scenario"
-                recorder.to_json(f"./generated/actions_{scenario_name}.json", scenario_name=scenario_name)
-                logger.info(f"Action log saved to ./generated/actions_{scenario_name}.json")
+                merged_path = f"./generated/merged_actions_{scenario_name}.json"
+                action_service = ActionService.get_instance()
+                merged_actions = action_service.get_merged_actions()
+                logger.debug(f"Got merged actions from ActionService singleton: {merged_actions}")
+                from ..tools.file_system_tools import save_json_to_file
+                save_json_to_file(merged_path, merged_actions)
+                logger.info(f"Merged actions saved to {merged_path} via save_json_to_file (using ActionService singleton)")
             except Exception as final_exc:
-                logger.error(f"Failed to save action log: {final_exc}")
+                logger.error(f"Failed to save merged actions: {final_exc}")
             # --- End final block ---
-
             return response
         except Exception as e:
             error_msg = f"Error running agent: {str(e)}"

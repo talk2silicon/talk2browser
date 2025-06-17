@@ -124,6 +124,29 @@ class DOMElement:
         }
 
 class DOMService:
+    # ... existing methods ...
+
+    async def show_manual_mode_timeout_popup(self):
+        """
+        Injects a popup into the browser to prompt the user to resume agent mode after a manual mode timeout.
+        """
+        logger.info("Injecting manual mode timeout popup into the browser.")
+        await self.page.evaluate("""
+            if (!document.getElementById('manualTimeoutPopup')) {
+              const popup = document.createElement('div');
+              popup.id = 'manualTimeoutPopup';
+              popup.innerHTML = '<div style="padding: 24px; background: rgba(34,40,49,0.95); color: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(31,38,135,0.37); text-align: center; font-size: 1.1em;">Manual mode has been active for a while.<br><br><button id="resumeAgentBtn" style="margin: 8px; padding: 8px 16px; background: #2196f3; color: white; border: none; border-radius: 6px;">Resume Agent</button><button id="continueManualBtn" style="margin: 8px; padding: 8px 16px; background: #757575; color: white; border: none; border-radius: 6px;">Continue Manual</button></div>';
+              document.body.appendChild(popup);
+              document.getElementById('resumeAgentBtn').onclick = () => {
+                window.setAgentMode && window.setAgentMode();
+                popup.remove();
+              };
+              document.getElementById('continueManualBtn').onclick = () => {
+                popup.remove();
+              };
+            }
+        """)
+
 
     """Service for interacting with the page DOM using buildDomTree.js."""
     

@@ -144,6 +144,63 @@ Debug, enhance, and stabilize Playwright script generation within the talk2brows
 - Restore accidentally deleted files and revert changes via git as needed.
 - Prepare for next steps to implement sensitive data handling and browser domain restrictions.
 
+## Manual/Agent Mode Integration and Action Merging Plan
+
+## 1. Refactor Timeout Popup Logic into DOMService
+- Add a method to `DOMService` (e.g., `show_manual_mode_timeout_popup`) to inject the timeout popup into the browser.
+- Ensure the popup includes buttons for “Resume Agent” and “Continue Manual” and interacts with the manual/agent mode toggle.
+
+## 2. Implement ManualModeService
+- Create a new `ManualModeService` class to:
+  - Manage an internal `asyncio.Event` for pausing/resuming the agent.
+  - Expose a handler (`handle_mode_change`) for Playwright/JS to call on mode changes.
+  - Provide `wait_if_manual_mode()` for agent nodes to await.
+  - Optionally, include methods to start a timeout monitor that calls the DOMService popup after a configurable period in manual mode.
+
+## 3. Integrate ManualModeService with Agent
+- Instantiate `ManualModeService` in your agent or main app.
+- Expose `handle_mode_change` to Playwright as `notifyPythonOfModeChange`.
+- In each agent node (LLM/tool), call `await manual_mode_service.wait_if_manual_mode()` before executing core logic.
+
+## 4. Collect and Store Manual and Agent Actions
+- Ensure manual actions are collected via the injected JS and can be retrieved from the browser context (e.g., `window.getManualActions()`).
+- Continue to record agent (LLM) actions as before.
+
+## 5. Merge Actions for Script Generation and Replay
+- Implement a merge function to combine manual and agent actions, with manual actions taking priority.
+- Save the combined actions JSON in the following schema:
+  ```json
+  {
+    "manual_actions": [...],
+    "agent_actions": [...],
+    "merged_actions": [...]
+  }
+  ```
+
+## 6. Update Script Generation Logic
+- When generating scripts (Playwright, Cypress, etc.), provide both `manual_actions` and `agent_actions` to the LLM, with clear instructions to prioritize manual actions.
+- Use `merged_actions` as the canonical source for replay.
+
+## 7. Testing and UX
+- Test the full workflow:
+  - Manual mode activation and timeout popup.
+  - Agent pause/resume.
+  - Collection and merging of actions.
+  - Script generation and replay using merged logs.
+- Refine popup UI/UX as needed for clarity and accessibility.
+
+## 8. Documentation
+- Document:
+  - The manual/agent mode workflow.
+  - How the action logs are merged and used.
+  - How to customize the timeout and popup logic.
+
+## Import Refactor Considerations
+- Use relative imports and avoid circular dependencies.
+- Centralize instantiation of services and pass references as needed.
+- Update all test/example scripts to use new import paths.
+- Document new module structure and imports.
+
 ## Blockers and Bugs
 - Initial failure to find the generated Playwright script due to import errors and path issues (resolved).
 - Playwright click failures caused by passing element hashes directly as selectors (resolved by hash resolution decorator).
