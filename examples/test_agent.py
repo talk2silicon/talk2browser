@@ -41,13 +41,13 @@ async def main():
             print("\n" + "="*80)
             print("STEP 1: Navigate to Sauce Demo")
             print("="*80)
-            # response = await agent.run(
-            #     "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce and then buy Sauce Labs Backpack"
-            # )
-
             response = await agent.run(
-                "Navigate to the https://browser.windsurf.com and create a selenium script"
+                "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce1 and then buy Sauce Labs Backpack"
             )
+
+            # response = await agent.run(
+            #     "Navigate to the https://browser.windsurf.com and create a selenium script"
+            # )
 
             # response = await agent.run(
             #     "read and replay the action json file in ./generated/actions_navigate.json"

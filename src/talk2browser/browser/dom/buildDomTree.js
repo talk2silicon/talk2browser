@@ -6,6 +6,139 @@
  * Legacy highlight logic has been fully removed for performance and maintainability.
  */
 /**
+ */
+
+// --- Manual Mode UI/Logic Integration ---
+(function() {
+  if (window.__t2bManualModeInjected) return;
+  window.__t2bManualModeInjected = true;
+
+  let manualMode = false;
+  let manualActions = [];
+
+  // Floating UI
+  const ui = document.createElement('div');
+  ui.id = 't2b-manual-ui';
+  ui.style.position = 'fixed';
+  ui.style.left = '50%';
+  ui.style.bottom = '32px';
+  ui.style.transform = 'translateX(-50%)';
+  ui.style.background = 'rgba(255,255,255,0.85)';
+  ui.style.borderRadius = '16px';
+  ui.style.boxShadow = '0 2px 16px rgba(0,0,0,0.15)';
+  ui.style.padding = '10px 24px';
+  ui.style.zIndex = 99999;
+  ui.style.display = 'flex';
+  ui.style.alignItems = 'center';
+  ui.style.gap = '12px';
+  ui.style.fontFamily = 'Inter, sans-serif';
+  ui.style.fontSize = '15px';
+  ui.style.userSelect = 'none';
+
+  const modeLabel = document.createElement('span');
+  modeLabel.textContent = 'Agent Mode';
+  modeLabel.style.fontWeight = 'bold';
+  modeLabel.style.color = '#222';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.textContent = 'Switch to Manual Mode';
+  toggleBtn.style.background = '#007bff';
+  toggleBtn.style.color = '#fff';
+  toggleBtn.style.border = 'none';
+  toggleBtn.style.borderRadius = '8px';
+  toggleBtn.style.padding = '6px 14px';
+  toggleBtn.style.cursor = 'pointer';
+  toggleBtn.style.fontWeight = 'bold';
+  toggleBtn.style.transition = 'background 0.2s';
+
+  toggleBtn.addEventListener('mouseenter', () => {
+    toggleBtn.style.background = '#0056b3';
+  });
+  toggleBtn.addEventListener('mouseleave', () => {
+    toggleBtn.style.background = '#007bff';
+  });
+
+  toggleBtn.onclick = () => {
+    setManualMode(!manualMode);
+  };
+
+  ui.appendChild(modeLabel);
+  ui.appendChild(toggleBtn);
+  document.body.appendChild(ui);
+
+  function setManualMode(isManual) {
+    manualMode = !!isManual;
+    if (manualMode) {
+      modeLabel.textContent = 'Manual Mode';
+      toggleBtn.textContent = 'Switch to Agent Mode';
+      ui.style.background = 'rgba(0,123,255,0.08)';
+      ui.style.color = '#007bff';
+      console.log('[T2B] Manual mode ON');
+    } else {
+      modeLabel.textContent = 'Agent Mode';
+      toggleBtn.textContent = 'Switch to Manual Mode';
+      ui.style.background = 'rgba(255,255,255,0.85)';
+      ui.style.color = '#222';
+      console.log('[T2B] Agent mode ON');
+    }
+    // Notify Python/Playwright
+    if (window.notifyPythonOfModeChange) {
+      window.notifyPythonOfModeChange(manualMode);
+    }
+  }
+
+  // Expose for Python
+  window.setManualMode = () => setManualMode(true);
+  window.setAgentMode = () => setManualMode(false);
+
+  // Action recording logic
+  function recordAction(type, args) {
+    if (!manualMode) return;
+    manualActions.push({ type, args, timestamp: Date.now() });
+    console.log('[T2B] Recorded manual action:', { type, args });
+  }
+
+  // Example: listen for clicks and fills (customize as needed)
+  document.addEventListener('click', (e) => {
+    if (!manualMode) return;
+    const el = e.target;
+    const xpath = getXPath(el);
+    recordAction('click', { xpath });
+  }, true);
+  document.addEventListener('input', (e) => {
+    if (!manualMode) return;
+    const el = e.target;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+      const xpath = getXPath(el);
+      recordAction('fill', { xpath, value: el.value });
+    }
+  }, true);
+
+  // XPath utility (simple version)
+  function getXPath(el) {
+    if (!el) return '';
+    if (el.id) return `//*[@id="${el.id}"]`;
+    const parts = [];
+    while (el && el.nodeType === 1 && el !== document.body) {
+      let ix = 1;
+      let sib = el.previousSibling;
+      while (sib) {
+        if (sib.nodeType === 1 && sib.tagName === el.tagName) ix++;
+        sib = sib.previousSibling;
+      }
+      parts.unshift(el.tagName + '[' + ix + ']');
+      el = el.parentNode;
+    }
+    return '/' + parts.join('/');
+  }
+
+  // Expose manual actions for Python
+  window.getManualActions = () => manualActions.slice();
+
+})();
+// --- End Manual Mode UI/Logic Integration ---
+
+/**
  * Build DOM Tree Function
  * This function builds a simplified DOM tree from the current page
  * and returns a map of node IDs to node data, along with the root node ID.
@@ -481,6 +614,18 @@ window.buildDomTree = (
   function isInteractiveElement(element) {
     if (!element || element.nodeType !== Node.ELEMENT_NODE) {
       return false;
+    }
+
+    // Exclude manual mode UI and its descendants
+    let current = element;
+    while (current) {
+      if (
+        current.id === 't2b-manual-ui' ||
+        (current.classList && current.classList.contains('t2b-manual-ui'))
+      ) {
+        return false;
+      }
+      current = current.parentElement;
     }
 
     // Cache the tagName and style lookups

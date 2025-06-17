@@ -22,13 +22,14 @@ from langgraph.prebuilt import ToolNode
 
 from ..browser import PlaywrightClient
 from ..browser.dom.service import DOMService
-from ..services.manual_mode_service import ManualModeService
+# ManualModeService fully merged into ActionService; import not needed.
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
     navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html,
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder
 )
+from ..services.action_service import ActionService  # Ensure this is at the top
 
 # Configure logging
 logging.basicConfig(
@@ -67,6 +68,7 @@ log_registered_tools()
 logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
 
 # System prompt template
+# SYSTEM_PROMPT updated: Explicitly instructs LLM to call generate_script after navigation if the task is script generation or only navigation actions are present.
 SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
 
 ## Core Capabilities:
@@ -78,14 +80,19 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser
 ## Guidelines:
 1. When a full URL is provided, use page_goto to navigate directly to that URL
 2. For search queries, prefer using DuckDuckGo (https://duckduckgo.com)
-3. Always check the current page state before taking actions
-4. Be specific in your searches to get the most relevant results
-5. If a task fails, try to understand why and take appropriate action
-6. When typing text, ensure the target element is visible and interactable
+3. Prefer using the available tools for all browser actions
+4. Only use the provided element hashes for element-related actions
+5. Use the minimal number of steps to complete the task
+6. Do not repeat actions unless necessary
 7. For multi-step tasks, complete one step at a time and verify success before proceeding
 8. When asked to find and interact with elements, first analyze the page structure
 9. If an action doesn't work as expected, try alternative approaches
 10. Always verify the result of each action before proceeding to the next step
+
+## Script Generation Guidance:
+- If the user task involves generating a script (e.g., Playwright, Selenium, Cypress), and you have completed the necessary navigation and exploration steps, call the generate_script tool with the recorded actions.
+- If only navigation actions are present and the task is to generate a script, call generate_script immediately after navigation.
+- Do NOT loop or repeat navigation or element scanning if the task is script generation and actions are already recorded.
 
 ## Multi-step Navigation:
 - Clearly identify each step before executing it
@@ -133,7 +140,7 @@ class BrowserAgent:
         # Initialize browser client and DOM service (will be started in __aenter__)
         self.client = PlaywrightClient(headless=headless)
         self.dom_service = None
-        self.manual_mode_service = None
+        # ManualModeService fully merged into ActionService; no instance needed.
         # Initialize PageManager (singleton)
         self.page_manager = PageManager.get_instance()
         self.graph = self._create_agent_graph()
@@ -154,18 +161,10 @@ class BrowserAgent:
             logger.info("Creating initial BrowserPage and DOMService...")
             browser_page = BrowserPage(self.client.page)
             self.dom_service = browser_page.dom_service
-            # --- Inject manual override UI JS ---
-            try:
-                from talk2browser.browser.manual_override_injector import inject_manual_override
-                logger.info("Injecting manual_override.js for manual mode UI...")
-                await inject_manual_override(self.client.page)
-                logger.info("manual_override.js injected successfully.")
-            except Exception as inject_exc:
-                logger.error(f"Failed to inject manual_override.js: {inject_exc}", exc_info=True)
-            # Instantiate ManualModeService with DOMService
-            self.manual_mode_service = ManualModeService(dom_service=self.dom_service)
-            # Expose mode change handler to Playwright
-            await self.manual_mode_service.expose_mode_change_handler(self.client.page)
+            # Set DOMService reference for ActionService real-time merging
+            ActionService.get_instance().set_dom_service(self.dom_service)
+            # Expose mode change handler to Playwright (handled by ActionService)
+            await ActionService.get_instance().expose_mode_change_handler(self.client.page)
             self.page_manager.add_page("main", browser_page)
             logger.info("Initial BrowserPage added to PageManager as 'main'")
 
@@ -263,9 +262,25 @@ class BrowserAgent:
         """Process messages with LLM and determine next step with full context.
         Handles page state, interactive elements, and LLM interaction.
         """
-        # Pause if manual mode is active
-        if self.manual_mode_service:
-            await self.manual_mode_service.wait_if_manual_mode()
+        logger.info("[Agent] Waiting for manual mode if needed...")
+        await ActionService.get_instance().wait_if_manual_mode()
+        logger.info("[Agent] Manual mode wait complete. Checking for new manual actions...")
+
+        # Only inject new manual actions (one-time) after each manual mode pause
+        new_manual_actions = ActionService.get_instance().pop_new_manual_actions()
+        logger.info(f"[Agent] Retrieved {len(new_manual_actions)} new manual actions after manual mode pause.")
+        logger.debug(f"[Agent] Message state before manual action injection: {state['messages']}")
+        if new_manual_actions:
+            from langchain_core.messages import ToolMessage
+            logger.info(f"[Agent] Injecting {len(new_manual_actions)} new manual actions into LLM context.")
+            for action in new_manual_actions:
+                msg = ToolMessage(
+                    tool_call_id=action.get("id", "manual"),
+                    tool_name=action.get("type", "manual_action"),
+                    content=str(action)
+                )
+                state["messages"].append(msg)
+            logger.debug(f"[Agent] Message state after manual action injection: {state['messages']}")
         messages = state["messages"]
         
         try:
@@ -353,7 +368,13 @@ class BrowserAgent:
             
             # Bind static tools to the LLM and get response
             llm_with_tools = self.llm.bind_tools(TOOLS)
+            # Log full messages sent to LLM
+            logger.debug(f"[Agent] LLM input messages: {[str(m) for m in messages]}")
             response = await llm_with_tools.ainvoke(messages)
+            logger.debug(f"[Agent] LLM response: {response}")
+            # If response has tool_calls, log them
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                logger.info(f"[Agent] LLM tool calls: {response.tool_calls}")
             
             # Info mode: log tool selection step
             if self.info_mode and hasattr(response, 'tool_calls') and response.tool_calls:
@@ -417,13 +438,10 @@ class BrowserAgent:
             try:
                 import os
                 import re
-                from ..services.action_service import ActionService
                 os.makedirs("./generated", exist_ok=True)
                 scenario_name = re.sub(r'[^a-zA-Z0-9_]', '_', task.lower().split()[0]) if task else "scenario"
                 merged_path = f"./generated/merged_actions_{scenario_name}.json"
-                action_service = ActionService.get_instance()
-                merged_actions = action_service.get_merged_actions()
-                logger.debug(f"Got merged actions from ActionService singleton: {merged_actions}")
+                merged_actions = ActionService.get_instance().actions
                 from ..tools.file_system_tools import save_json_to_file
                 save_json_to_file(merged_path, merged_actions)
                 logger.info(f"Merged actions saved to {merged_path} via save_json_to_file (using ActionService singleton)")

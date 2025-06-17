@@ -33,6 +33,8 @@ def generate_script(language: str, task: str, prompt: Optional[str] = None) -> s
         raise ValueError("No merged actions available.")
     llm = get_llm()
     script_service = ScriptGenerationService(llm=llm)
+    actions = action_service.actions
+    logger.info(f"[ScriptTools] Using canonical merged actions for script generation: {json.dumps(actions, indent=2)}")
     logger.info(f"[ScriptTools] Generating {language} script for scenario: {task}")
     logger.debug(f"[ScriptTools] Actions for script generation: {json.dumps(actions, indent=2)}")
     if language.lower() == 'playwright':
@@ -56,7 +58,8 @@ def generate_negative_tests(language: str, prompt: str) -> List[str]:
     Returns:
         List of paths to generated negative test scripts.
     """
-    actions = action_service.get_agent_actions()
+    actions = action_service.actions
+    logger.info(f"[ScriptTools] Using canonical merged actions for negative test generation: {json.dumps(actions, indent=2)}")
     if not actions:
         logger.error("No actions recorded in memory for negative test generation.")
         raise ValueError("No actions recorded.")

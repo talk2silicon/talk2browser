@@ -132,6 +132,8 @@ async def is_enabled(selector: str, **kwargs) -> bool:
             "result": enabled
         }
         ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after is_enabled: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after is_enabled: {ActionService.get_instance().actions}")
         return enabled
     except Exception as e:
         logger.error(f"Failed to check enabled for {selector}: {e}")
@@ -163,11 +165,14 @@ async def get_count(selector: str, **kwargs) -> int:
         elements = await page.query_selector_all(selector)
         count = len(elements)
         logger.info(f"Found {count} elements for {selector}")
-        recorder.record_action(
-            tool="get_count",
-            args={"selector": selector},
-            command=f"len(await page.query_selector_all('{selector}'))"
-        )
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "get_count",
+            "args": {"selector": selector}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after get_count: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after get_count: {ActionService.get_instance().actions}")
         
         return count
     except Exception as e:
@@ -201,6 +206,8 @@ async def navigate(url: str) -> str:
         "screenshot": screenshot_path
     }
     ActionService.get_instance().record_agent_action(action_data)
+    logger.debug(f"[browser_tools] Agent actions after navigate: {ActionService.get_instance().agent_actions}")
+    logger.debug(f"[browser_tools] Merged actions after navigate: {ActionService.get_instance().actions}")
     logger.info(f"Navigated to {url}. Page title: {title}")
     return f"Navigated to {url}. Page title: {title}"
 
@@ -235,23 +242,26 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         locator = page.locator(selector)
         await locator.wait_for(state='visible', timeout=timeout)
         await locator.click()
-        recorder.record_action(
-            tool="click",
-            args={"selector": selector, "timeout": timeout},
-            command=f"await page.locator('{selector}').click()"
-        )
-        await capture_and_record_screenshot(page, "click", logger, recorder, success=True)
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "click",
+            "args": {"selector": selector, "timeout": timeout}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after click: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after click: {ActionService.get_instance().actions}")
+        await capture_screenshot_for_action(page, "click", logger, success=True)
         logger.info(f"Clicked {selector}")
         return f"Clicked {selector}"
     except PlaywrightTimeoutError:
         error_msg = f"Timeout waiting for {selector} to be clickable."
         logger.error(error_msg)
-        await capture_and_record_screenshot(page, "click", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "click", logger, success=False)
         return f"Error: {error_msg}"
     except Exception as e:
         error_msg = f"Failed to click {selector}: {e}"
         logger.error(error_msg)
-        await capture_and_record_screenshot(page, "click", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "click", logger, success=False)
         return f"Error: {error_msg}"
 
 @tool
@@ -284,8 +294,15 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         try:
             await locator.fill(text)
             logger.info(f"Filled field {selector} with text: {text} on BrowserPage (url: {page.url})")
-            recorder.record_action(tool="fill", args={"selector": selector, "text": text}, command=f"await page.locator('{selector}').fill('{text}')")
-            await capture_and_record_screenshot(page, "fill", logger, recorder, success=True)
+            from ..services.action_service import ActionService
+            action_data = {
+                "type": "fill",
+                "args": {"selector": selector, "text": text}
+            }
+            ActionService.get_instance().record_agent_action(action_data)
+            logger.debug(f"[browser_tools] Agent actions after fill: {ActionService.get_instance().agent_actions}")
+            logger.debug(f"[browser_tools] Merged actions after fill: {ActionService.get_instance().actions}")
+            await capture_screenshot_for_action(page, "fill", logger, success=True)
             return f"Filled field {selector} with text: {text}"
         finally:
             if xpath:
@@ -298,7 +315,7 @@ async def fill(selector: str, text: str, **kwargs) -> str:
     except Exception as e:
         error_msg = f"Failed to fill field {selector}: {str(e)}"
         logger.error(error_msg)
-        await capture_and_record_screenshot(page, "fill", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "fill", logger, success=False)
         await handle_tool_exception(page, selector, error_msg, logger)
         return f"Error: {error_msg}"
 
@@ -318,12 +335,19 @@ async def type(selector: str, text: str, **kwargs) -> str:
         locator = page.locator(selector)
         await locator.type(text)
         logger.info(f"Typed '{text}' into {selector}")
-        recorder.record_action(tool="type", args={"selector": selector, "text": text}, command=f"await page.locator('{selector}').type('{text}')")
-        await capture_and_record_screenshot(page, "type", logger, recorder, success=True)
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "type",
+            "args": {"selector": selector, "text": text}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after type: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after type: {ActionService.get_instance().actions}")
+        await capture_screenshot_for_action(page, "type", logger, success=True)
         return f"Typed '{text}' into {selector}"
     except Exception as e:
         logger.error(f"Failed to type into {selector}: {e}")
-        await capture_and_record_screenshot(page, "type", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "type", logger, success=False)
         return f"Error: Failed to type into {selector}: {e}"
 
 @tool
@@ -342,12 +366,19 @@ async def check(selector: str, **kwargs) -> str:
         locator = page.locator(selector)
         await locator.check()
         logger.info(f"Checked {selector}")
-        recorder.record_action(tool="check", args={"selector": selector}, command=f"await page.locator('{selector}').check()")
-        await capture_and_record_screenshot(page, "check", logger, recorder, success=True)
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "check",
+            "args": {"selector": selector}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after check: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after check: {ActionService.get_instance().actions}")
+        await capture_screenshot_for_action(page, "check", logger, success=True)
         return f"Checked {selector}"
     except Exception as e:
         logger.error(f"Failed to check {selector}: {e}")
-        await capture_and_record_screenshot(page, "check", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "check", logger, success=False)
         return f"Error: Failed to check {selector}: {e}"
 
 @tool
@@ -366,12 +397,19 @@ async def uncheck(selector: str, **kwargs) -> str:
         locator = page.locator(selector)
         await locator.uncheck()
         logger.info(f"Unchecked {selector}")
-        recorder.record_action(tool="uncheck", args={"selector": selector}, command=f"await page.locator('{selector}').uncheck()")
-        await capture_and_record_screenshot(page, "uncheck", logger, recorder, success=True)
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "uncheck",
+            "args": {"selector": selector}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after uncheck: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after uncheck: {ActionService.get_instance().actions}")
+        await capture_screenshot_for_action(page, "uncheck", logger, success=True)
         return f"Unchecked {selector}"
     except Exception as e:
         logger.error(f"Failed to uncheck {selector}: {e}")
-        await capture_and_record_screenshot(page, "uncheck", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "uncheck", logger, success=False)
         return f"Error: Failed to uncheck {selector}: {e}"
 
 @tool
@@ -390,12 +428,19 @@ async def select_option(selector: str, value: str, **kwargs) -> str:
         locator = page.locator(selector)
         await locator.select_option(value)
         logger.info(f"Selected option '{value}' in {selector}")
-        recorder.record_action(tool="select_option", args={"selector": selector, "value": value}, command=f"await page.locator('{selector}').select_option('{value}')")
-        await capture_and_record_screenshot(page, "select_option", logger, recorder, success=True)
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "select_option",
+            "args": {"selector": selector, "value": value}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after select_option: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after select_option: {ActionService.get_instance().actions}")
+        await capture_screenshot_for_action(page, "select_option", logger, success=True)
         return f"Selected option '{value}' in {selector}"
     except Exception as e:
         logger.error(f"Failed to select option in {selector}: {e}")
-        await capture_and_record_screenshot(page, "select_option", logger, recorder, success=False)
+        await capture_screenshot_for_action(page, "select_option", logger, success=False)
         return f"Error: Failed to select option in {selector}: {e}"
 
 @tool
@@ -415,7 +460,12 @@ async def hover(selector: str, **kwargs) -> str:
         selector = normalize_selector(selector, logger)
         await locator.hover()
         logger.info(f"Hovered over {selector}")
-        recorder.record_action(tool="hover", args={"selector": selector}, command=f"await page.locator('{selector}').hover()")
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "hover",
+            "args": {"selector": selector}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
         
         return f"Hovered over {selector}"
     except Exception as e:
@@ -440,17 +490,15 @@ async def wait_for_selector(selector: str, state: str = "visible", timeout: int 
         selector = normalize_selector(selector, logger)
         await locator.wait_for(state=state, timeout=timeout)
         logger.info(f"Waited for {selector} to be {state}")
-        recorder.record_action(tool="wait_for_selector", args={"selector": selector, "state": state, "timeout": timeout}, command=f"await page.locator('{selector}').wait_for(state='{state}', timeout={timeout})")
-        try:
-            from pathlib import Path
-            action_idx = len(recorder.actions) - 1
-            base_name = recorder.base_name or "step"
-            screenshot_path = str(Path("./generated") / f"{base_name}_step{action_idx}_wait_for_selector.png")
-            await page.screenshot(path=screenshot_path, full_page=True)
-            recorder.update_screenshot_path(action_idx, screenshot_path)
-            logger.debug(f"Screenshot saved to {screenshot_path} for wait_for_selector action.")
-        except Exception as e:
-            logger.error(f"Failed to save screenshot after wait_for_selector: {e}")
+        from ..services.action_service import ActionService
+        action_data = {
+            "type": "wait_for_selector",
+            "args": {"selector": selector, "state": state, "timeout": timeout}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after wait_for_selector: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after wait_for_selector: {ActionService.get_instance().actions}")
+        await capture_screenshot_for_action(page, "wait_for_selector", logger, success=True)
         return f"Waited for {selector} to be {state}"
     except Exception as e:
         logger.error(f"Failed to wait for {selector}: {e}")
@@ -477,7 +525,14 @@ async def screenshot(selector: str = None, path: str = None, **kwargs) -> str:
         else:
             await page.screenshot(path=path, full_page=True)
             logger.info(f"Full page screenshot taken at {path}")
-            recorder.record_action(tool="screenshot", args={"selector": None, "path": path}, command=f"await page.screenshot(path='{path}', full_page=True)")
+            from ..services.action_service import ActionService
+        action_data = {
+            "type": "screenshot",
+            "args": {"selector": None, "path": path}
+        }
+        ActionService.get_instance().record_agent_action(action_data)
+        logger.debug(f"[browser_tools] Agent actions after screenshot: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after screenshot: {ActionService.get_instance().actions}")
         return f"Screenshot taken at {path}"
     except Exception as e:
         logger.error(f"Failed to take screenshot: {e}")
@@ -516,8 +571,14 @@ def generate_pdf_from_html(html: str, path: str = None) -> str:
                 await page.pdf(path=output_path)
                 await browser.close()
                 logger.info(f"PDF generated at {output_path}")
-                if recorder:
-                    recorder.record_action(tool="generate_pdf_from_html", args={"html": "<omitted>", "path": output_path}, command=f"await page.pdf(path='{output_path}')")
+                from ..services.action_service import ActionService
+                action_data = {
+                    "type": "generate_pdf_from_html",
+                    "args": {"html": "<omitted>", "path": output_path}
+                }
+                ActionService.get_instance().record_agent_action(action_data)
+                logger.debug(f"[browser_tools] Agent actions after generate_pdf_from_html: {ActionService.get_instance().agent_actions}")
+                logger.debug(f"[browser_tools] Merged actions after generate_pdf_from_html: {ActionService.get_instance().actions}")
                 return output_path
         except Exception as e:
             logger.error(f"Failed to generate PDF: {e}")
