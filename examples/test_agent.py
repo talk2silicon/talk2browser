@@ -42,7 +42,7 @@ async def main():
             print("STEP 1: Navigate to Sauce Demo")
             print("="*80)
             response = await agent.run(
-                "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce1 and then buy Sauce Labs Backpack"
+                "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce123 and then buy Sauce Labs Backpack"
             )
 
             # response = await agent.run(
