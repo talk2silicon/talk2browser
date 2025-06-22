@@ -30,6 +30,7 @@ from ..tools import (
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder
 )
 from ..services.action_service import ActionService  # Ensure this is at the top
+from ..services.sensitive_data_service import SensitiveDataService
 
 # Configure logging
 logging.basicConfig(
@@ -70,6 +71,12 @@ logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in
 # System prompt template
 # SYSTEM_PROMPT updated: Explicitly instructs LLM to call generate_script after navigation if the task is script generation or only navigation actions are present.
 SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
+
+## Sensitive Data Handling Policy:
+- For any tool call that requires sensitive information (such as usernames, passwords, API keys, or any other secrets), always use the provided secret placeholder (e.g., ${company_password}) as the argument value.
+- Never prompt the user for secret values, even if a secret is missing. Always assume that the agent or tool layer will handle secret resolution or user interaction.
+- Do not mention secrets or placeholders in your output to the user.
+- If a secret is missing, simply proceed as if the action was attempted, and do not ask the user for any sensitive information.
 
 ## Core Capabilities:
 - Web navigation (URLs, links, buttons, forms)
@@ -117,16 +124,18 @@ class AgentState(TypedDict):
 class BrowserAgent:
     """Agent for browser automation using LangGraph and Playwright."""
     
-    def __init__(self, llm: Optional[ChatAnthropic] = None, headless: bool = False, info_mode: bool = False):
+    def __init__(self, llm: Optional[ChatAnthropic] = None, headless: bool = False, info_mode: bool = False, sensitive_data: dict = None):
         """Initialize the browser agent.
         
         Args:
             llm: Optional ChatAnthropic instance. If not provided, a default one will be created.
             headless: Whether to run the browser in headless mode.
             info_mode: If True, print live story-mode logs (step-by-step narrative)
+            sensitive_data: Optional dict of secret keys/values for runtime secret injection
         """
         self.headless = headless
         self.info_mode = info_mode
+        self.sensitive_data = sensitive_data or {}
         self.story_log = []  # Collects story steps if info_mode is enabled
         # Initialize LLM
         self.llm = llm or ChatAnthropic(
@@ -143,8 +152,15 @@ class BrowserAgent:
         # ManualModeService fully merged into ActionService; no instance needed.
         # Initialize PageManager (singleton)
         self.page_manager = PageManager.get_instance()
+        
+        # User-friendly SensitiveDataService auto-init
+        if getattr(SensitiveDataService, "_instance", None) is None:
+            logger.warning("SensitiveDataService not configured, defaulting to environment-only secrets.")
+            SensitiveDataService.configure({})
+        
         self.graph = self._create_agent_graph()
         logger.info("BrowserAgent initialized with %s", self.llm.__class__.__name__)
+        logger.debug(f"Sensitive data keys: {list(self.sensitive_data.keys()) if self.sensitive_data else []}")
     
     async def __aenter__(self):
         """Async context manager entry."""
@@ -224,7 +240,7 @@ class BrowserAgent:
         )
         
         # Limit maximum tool calls
-        MAX_TOOL_CALLS = 10
+        MAX_TOOL_CALLS = 25
         if tool_call_count >= MAX_TOOL_CALLS:
             logger.warning(f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation")
             return END
@@ -410,22 +426,27 @@ class BrowserAgent:
                 "next": END
             }
     
-    async def run(self, task: str) -> str:
+    async def run(self, task: str, sensitive_data: dict = None) -> str:
         """Run the agent with the given task.
         
         Args:
             task: The task or query for the agent.
-            
+            sensitive_data: Optional dict for runtime secret injection (overrides self.sensitive_data)
         Returns:
             The agent's response as a string.
         """
         try:
+            # Use provided sensitive_data or fall back to self.sensitive_data
+            effective_sensitive_data = sensitive_data or self.sensitive_data or {}
+            # Configure SensitiveDataService for this run
+            from talk2browser.services.sensitive_data_service import SensitiveDataService
+            SensitiveDataService.configure(effective_sensitive_data)
+            logger.info(f"SensitiveDataService configured with keys: {list(effective_sensitive_data.keys()) if effective_sensitive_data else []}")
             # Initialize state
             initial_state = AgentState(
                 messages=[HumanMessage(content=task)],
                 next="agent"
             )
-            # Run the graph
             logger.info(f"Starting agent with task: {task}")
             result = await self.graph.ainvoke(initial_state)
             # Get final response

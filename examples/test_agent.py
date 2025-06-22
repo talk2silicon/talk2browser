@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from talk2browser.utils.logging import setup_logging
 from talk2browser.agent.agent import BrowserAgent
+from talk2browser.services.sensitive_data_service import SensitiveDataService  # <-- Added import
 
 # Load environment variables from .env
 load_dotenv()
@@ -41,26 +42,39 @@ async def main():
             print("\n" + "="*80)
             print("STEP 1: Navigate to Sauce Demo")
             print("="*80)
-            response = await agent.run(
-                "Navigate to the Sauce Demo website at https://www.saucedemo.com and login with standard_user/secret_sauce123 and then buy Sauce Labs Backpack"
-            )
+            # --- ENV VAR secret injection example ---
+            print("\n" + "="*80)
+            print("TEST 1: ENV VAR SECRET INJECTION")
+            print("="*80)
+            env_prompt = "Navigate to https://www.saucedemo.com and login with ${SAUCE_USER}/${SAUCE_PASS} and then buy Sauce Labs Backpack"
+            response_env = await agent.run(env_prompt)
+            print("\nAgent response (env vars):")
+            print(response_env)
+            print("="*80)
 
-            # response = await agent.run(
-            #     "Navigate to the https://browser.windsurf.com and create a selenium script"
-            # )
+            # --- sensitive_data dict injection example ---
+            print("\n" + "="*80)
+            print("TEST 2: sensitive_data DICT INJECTION")
+            print("="*80)
+            sensitive_data = {
+                "company_username": "standard_user",
+                "company_password": "secret_sauce"
+            }
+            # IMPORTANT: Use ${...} placeholders so the LLM/tool layer will pass these to the resolver!
+            SensitiveDataService.configure(sensitive_data)
+            # Debug log from test script
+            svc = getattr(SensitiveDataService, "_instance", None)
+            if svc is None:
+                print("[test_agent.py] SensitiveDataService._instance is None!")
+            else:
+                print(f"[test_agent.py] After configure: id={id(svc)} keys={list(getattr(svc, '_secrets', {}).keys())}")
+            dict_prompt = "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then buy Sauce Labs Backpack"
+            logging.debug("Running dict_prompt: %s", dict_prompt)
+            response_dict = await agent.run(dict_prompt)
+            print("\nAgent response (sensitive_data dict):")
+            print(response_dict)
+            print("="*80)
 
-            # response = await agent.run(
-            #     "read and replay the action json file in ./generated/actions_navigate.json"
-            # )
-
-
-            # response = await agent.run(
-            #     TASK
-            # )
- 
-            print("\nAgent response:")
-            print(response)
-            
             print("SAUCE DEMO LOGIN TEST COMPLETED!")
             print("="*80)
             

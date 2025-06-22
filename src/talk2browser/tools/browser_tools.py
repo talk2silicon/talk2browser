@@ -60,6 +60,36 @@ async def capture_screenshot_for_action(page, tool_name: str, logger, success=Tr
         logger.error(f"Failed to capture screenshot for {tool_name}: {e}")
         return None
 
+def resolve_secret_args(tool_func):
+    import functools
+    from ..utils.secret_resolver import resolve_secret_placeholders
+    import logging
+    @functools.wraps(tool_func)
+    async def wrapper(*args, **kwargs):
+        logger = logging.getLogger(__name__)
+        # Remove sensitive_data from kwargs if present
+        kwargs.pop("sensitive_data", None)
+        # Resolve secrets in all string args/kwargs
+        logger.debug(f"[resolve_secret_args] BEFORE: args={args}, kwargs={kwargs}")
+        new_args = [
+            resolve_secret_placeholders(arg) if isinstance(arg, str) else arg
+            for arg in args
+        ]
+        new_kwargs = {
+            k: resolve_secret_placeholders(v) if isinstance(v, str) else v
+            for k, v in kwargs.items()
+        }
+        logger.debug(f"[resolve_secret_args] AFTER: new_args={new_args}, new_kwargs={new_kwargs}")
+        # Warn if any string arg/kwarg still looks like a secret placeholder
+        for idx, val in enumerate(new_args):
+            if isinstance(val, str) and val.startswith("${") and val.endswith("}"):
+                logger.warning(f"[resolve_secret_args] Unresolved secret placeholder in args[{idx}]: {val}")
+        for k, v in new_kwargs.items():
+            if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
+                logger.warning(f"[resolve_secret_args] Unresolved secret placeholder in kwargs['{k}']: {v}")
+        return await tool_func(*new_args, **new_kwargs)
+    return wrapper
+
 def resolve_hash_args(tool_func):
     @functools.wraps(tool_func)
     async def wrapper(*args, **kwargs):
@@ -265,6 +295,7 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         return f"Error: {error_msg}"
 
 @tool
+@resolve_secret_args
 @resolve_hash_args
 async def fill(selector: str, text: str, **kwargs) -> str:
     """Fill a form field with the specified text on the current browser page.
@@ -276,6 +307,10 @@ async def fill(selector: str, text: str, **kwargs) -> str:
     """
     logger = logging.getLogger(__name__)
     logger.info(f"TOOL CALL: fill(selector={selector}, text={text}, kwargs={kwargs})")
+    # Assert that text is not a secret placeholder
+    if isinstance(text, str) and text.startswith("${") and text.endswith("}"):
+        logger.error(f"[fill] Secret placeholder was not resolved: {text}")
+        raise ValueError(f"[fill] Secret placeholder was not resolved: {text}")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
@@ -299,8 +334,11 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                 "type": "fill",
                 "args": {"selector": selector, "text": text}
             }
-            ActionService.get_instance().record_agent_action(action_data)
-            logger.debug(f"[browser_tools] Agent actions after fill: {ActionService.get_instance().agent_actions}")
+            # Add hash if available from dom_service
+            dom_service = None
+            if browser_page and hasattr(browser_page, "get_dom_service"):
+                dom_service = browser_page.get_dom_service()
+                logger.debug(f"Fetched dom_service in finally block: {dom_service}")
             logger.debug(f"[browser_tools] Merged actions after fill: {ActionService.get_instance().actions}")
             await capture_screenshot_for_action(page, "fill", logger, success=True)
             return f"Filled field {selector} with text: {text}"
