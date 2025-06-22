@@ -26,6 +26,13 @@ TASK = """
 Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
 """
 
+TASK2 = """
+Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name.
+https://www.tiktokv.com/share/video/7470981717659110678/ 
+"""
+
+
+
 async def main():
     """Test the BrowserAgent with a Sauce Demo login flow."""
     # Configure more detailed logging
@@ -47,7 +54,7 @@ async def main():
             print("TEST 1: ENV VAR SECRET INJECTION")
             print("="*80)
             env_prompt = "Navigate to https://www.saucedemo.com and login with ${SAUCE_USER}/${SAUCE_PASS} and then buy Sauce Labs Backpack"
-            response_env = await agent.run(env_prompt)
+            response_env = await agent.run(TASK2)
             print("\nAgent response (env vars):")
             print(response_env)
             print("="*80)
@@ -70,7 +77,7 @@ async def main():
                 print(f"[test_agent.py] After configure: id={id(svc)} keys={list(getattr(svc, '_secrets', {}).keys())}")
             dict_prompt = "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then buy Sauce Labs Backpack"
             logging.debug("Running dict_prompt: %s", dict_prompt)
-            response_dict = await agent.run(dict_prompt)
+            #response_dict = await agent.run(dict_prompt)
             print("\nAgent response (sensitive_data dict):")
             print(response_dict)
             print("="*80)

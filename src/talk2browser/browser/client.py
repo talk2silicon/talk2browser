@@ -21,11 +21,21 @@ class PlaywrightClient:
         self.playwright = None
 
     async def start(self) -> None:
-        """Start the Playwright browser instance."""
+        """Start the Playwright browser instance with large window and viewport."""
         self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=self.headless)
-        self.context = await self.browser.new_context()
+        window_width, window_height = 1920, 1080
+        launch_args = [f"--window-size={window_width},{window_height}"]
+        logging.info(f"Launching Chromium with window size: {window_width}x{window_height}")
+        self.browser = await self.playwright.chromium.launch(
+            headless=self.headless,
+            args=launch_args
+        )
+        logging.info(f"Creating browser context with viewport: {window_width}x{window_height}")
+        self.context = await self.browser.new_context(
+            viewport={'width': window_width, 'height': window_height}
+        )
         self.page = await self.context.new_page()
+        logging.info(f"Browser page created. Viewport and window size should now be set.")
 
     async def close(self) -> None:
         """Close the browser and cleanup resources."""
