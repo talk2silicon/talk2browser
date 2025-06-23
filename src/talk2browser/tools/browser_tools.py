@@ -330,11 +330,30 @@ async def fill(selector: str, text: str, **kwargs) -> str:
             await locator.fill(text)
             logger.info(f"Filled field {selector} with text: {text} on BrowserPage (url: {page.url})")
             from ..services.action_service import ActionService
+            # --- Ensure selector hash is resolved and included in args for ActionService ---
+            hash_val = None
+            if browser_page and hasattr(browser_page, "get_dom_service"):
+                dom_service = browser_page.get_dom_service()
+                if dom_service:
+                    # Try to resolve hash from selector
+                    if selector and isinstance(selector, str):
+                        if selector.startswith('#'):
+                            hash_val = selector
+                        else:
+                            # Try to find hash for this selector in DOMService
+                            element_map = getattr(dom_service, '_element_map', {})
+                            for h, sel in element_map.items():
+                                if sel == selector:
+                                    hash_val = h
+                                    break
+            logger.debug(f"[fill] Resolved hash for selector '{selector}': {hash_val}")
             action_data = {
                 "type": "fill",
-                "args": {"selector": selector, "text": text}
+                "args": {"selector": selector, "text": text, "hash": hash_val} if hash_val else {"selector": selector, "text": text}
             }
-            # Add hash if available from dom_service
+            from ..services.action_service import ActionService
+            ActionService.get_instance().record_agent_action(action_data)
+            logger.info(f"[fill] Recorded fill action: {action_data}")
             dom_service = None
             if browser_page and hasattr(browser_page, "get_dom_service"):
                 dom_service = browser_page.get_dom_service()
@@ -378,6 +397,23 @@ async def type(selector: str, text: str, **kwargs) -> str:
             "type": "type",
             "args": {"selector": selector, "text": text}
         }
+        # --- Ensure selector hash is resolved and included in args for ActionService ---
+        hash_val = None
+        if browser_page and hasattr(browser_page, "get_dom_service"):
+            dom_service = browser_page.get_dom_service()
+            if dom_service:
+                if selector and isinstance(selector, str):
+                    if selector.startswith('#'):
+                        hash_val = selector
+                    else:
+                        element_map = getattr(dom_service, '_element_map', {})
+                        for h, sel in element_map.items():
+                            if sel == selector:
+                                hash_val = h
+                                break
+        logger.debug(f"[type] Resolved hash for selector '{selector}': {hash_val}")
+        if hash_val:
+            action_data['args']['hash'] = hash_val
         ActionService.get_instance().record_agent_action(action_data)
         logger.debug(f"[browser_tools] Agent actions after type: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after type: {ActionService.get_instance().actions}")

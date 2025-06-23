@@ -15,41 +15,32 @@ class ActionService:
 
     def record_agent_action(self, action: dict) -> None:
         logger.info(f"[ActionService] Recording agent action: {action}")
-        # --- Hash resolution for element-based actions ---
         action_type = action.get('type', '')
         args = action.get('args', {})
-        # List of element-based actions (expand as needed)
         element_actions = {'click', 'fill', 'type', 'check', 'uncheck', 'select_option', 'hover'}
-        # Only resolve if action is element-based and hash is missing
+        # --- Hash resolution for element-based actions (for merging only, not for saving) ---
         if action_type in element_actions and 'hash' not in args:
             selector = args.get('selector')
             xpath = args.get('xpath')
             hash_val = None
             if self.dom_service:
-                # Try to resolve via selector or xpath
                 try:
-                    # Try selector as hash
                     if selector and isinstance(selector, str) and selector.startswith('#'):
                         hash_val = selector
-                    # Try xpath lookup in element map
                     elif xpath and hasattr(self.dom_service, '_element_map'):
-                        # Find hash by matching xpath in element map
                         for h, xp in self.dom_service._element_map.items():
                             if xp == xpath:
                                 hash_val = h
                                 break
-                    # Fallback: try to find element by selector/xpath
                     if not hash_val:
-                        # Try selector as xpath
                         lookup_xpath = selector if selector and (selector.startswith('/') or selector.startswith('html/')) else xpath
                         if lookup_xpath and hasattr(self.dom_service, '_interactive_elements'):
                             for elem in self.dom_service._interactive_elements:
                                 if elem.xpath == lookup_xpath:
                                     hash_val = f"#{elem.element_hash}"
                                     break
+                    # Only use hash for merging, do NOT add to action JSON
                     if hash_val:
-                        args['hash'] = hash_val
-                        action['args'] = args
                         logger.info(f"[ActionService] Resolved hash for action: {action_type} -> {hash_val}")
                     else:
                         logger.warning(f"[ActionService] Could not resolve hash for action: {action_type} (selector={selector}, xpath={xpath})")
@@ -57,6 +48,23 @@ class ActionService:
                     logger.error(f"[ActionService] Exception while resolving hash: {e}")
             else:
                 logger.warning("[ActionService] dom_service not set, cannot resolve hash for agent action.")
+        # --- Sensitive Data Masking for fill/type ---
+        from ..services.sensitive_data_service import SensitiveDataService
+        if action_type in {'fill', 'type'}:
+            for key in ['text', 'value']:
+                if key in args:
+                    real_value = args[key]
+                    placeholder = None
+                    if hasattr(SensitiveDataService, 'get_placeholder_for_value'):
+                        placeholder = SensitiveDataService.get_placeholder_for_value(real_value)
+                    if placeholder:
+                        logger.info(f"[ActionService] Masking sensitive value for {action_type}: {key}={real_value} -> {placeholder}")
+                        args[key] = placeholder
+        # Remove hash from args before saving JSON
+        if 'hash' in args:
+            logger.debug(f"[ActionService] Removing hash from action args before saving: {args['hash']}")
+            args.pop('hash')
+        action['args'] = args
         self.agent_actions.append(action)
         logger.info(f"[ActionService] Agent actions now has {len(self.agent_actions)} actions: {self.agent_actions}")
         self._perform_realtime_merge()

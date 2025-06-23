@@ -18,6 +18,36 @@ class SensitiveDataService:
         logger.debug(f"SensitiveDataService initialized with keys: {list(self._secrets.keys())}")
 
     @classmethod
+    def get_placeholder_for_value(cls, value: str) -> str | None:
+        """Return the placeholder (e.g. ${MY_SECRET}) if value matches a known secret, else None."""
+        if cls._instance is None:
+            return None
+        logger = logging.getLogger(__name__)
+        checked = False
+        # Normalize value for comparison
+        norm_value = value.strip() if isinstance(value, str) else value
+        # Check runtime secrets
+        for key, val in cls._instance._secrets.items():
+            if isinstance(val, str) and val.strip() == norm_value:
+                logger.info(f"[SensitiveDataService] Found secret match for value '{value}' with key '{key}', returning placeholder '${{{key}}}'")
+                return f"${{{key}}}"
+            else:
+                logger.debug(f"[SensitiveDataService] No match for value '{value}' with secret key '{key}': '{val}'")
+            checked = True
+        # Also check environment variables
+        import os
+        for key in os.environ:
+            env_val = os.environ[key]
+            if isinstance(env_val, str) and env_val.strip() == norm_value:
+                logger.info(f"[SensitiveDataService] Found env match for value '{value}' with key '{key}', returning placeholder '${{{key}}}'")
+                return f"${{{key}}}"
+            else:
+                logger.debug(f"[SensitiveDataService] No match for value '{value}' with env key '{key}': '{env_val}'")
+            checked = True
+        logger.warning(f"[SensitiveDataService] No placeholder found for value '{value}'. Checked secrets and env vars.")
+        return None
+
+    @classmethod
     def configure(cls, secrets: Optional[Dict[str, str]] = None):
         """Configure the singleton instance with a new secret dict."""
         cls._instance = cls(secrets)

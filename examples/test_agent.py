@@ -31,6 +31,10 @@ Go to this tiktok video url, open it and extract the @username from the resultin
 https://www.tiktokv.com/share/video/7470981717659110678/ 
 """
 
+TASK3 = """
+ replay ./generated/merged_actions_go.json
+"""
+
 
 
 async def main():
@@ -54,7 +58,7 @@ async def main():
             print("TEST 1: ENV VAR SECRET INJECTION")
             print("="*80)
             env_prompt = "Navigate to https://www.saucedemo.com and login with ${SAUCE_USER}/${SAUCE_PASS} and then buy Sauce Labs Backpack"
-            response_env = await agent.run(TASK2)
+            response_env = await agent.run(env_prompt)
             print("\nAgent response (env vars):")
             print(response_env)
             print("="*80)
