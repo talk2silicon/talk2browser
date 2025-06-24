@@ -283,6 +283,25 @@ class ActionService:
             "actions": self._actions
         })
 
+    def save_merged_actions_with_prompt(self, task: str, output_dir: str = "./generated") -> str:
+        """
+        Save merged actions to a descriptive filename based on the task and timestamp.
+        Returns the full path to the saved file.
+        """
+        import os
+        import re
+        from datetime import datetime
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        prefix = "_".join(re.sub(r'[^a-zA-Z0-9]+', ' ', task).lower().split()[:5]) if task else "scenario"
+        filename = f"actions_{prefix}_{timestamp}.json"
+        path = os.path.join(output_dir, filename)
+        from ..tools.file_system_tools import save_json_to_file
+        save_json_to_file(path, self._actions)
+        logger.info(f"[ActionService] Merged actions saved to {path}")
+        return path
+
+
     def load_action_lists(self, path: str):
         logger.info(f"Loading action lists from {path}")
         with open(path, "r", encoding="utf-8") as f:

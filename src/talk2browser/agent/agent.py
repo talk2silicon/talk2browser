@@ -457,15 +457,8 @@ class BrowserAgent:
             logger.info("Agent task completed")
             # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
-                import os
-                import re
-                os.makedirs("./generated", exist_ok=True)
-                scenario_name = re.sub(r'[^a-zA-Z0-9_]', '_', task.lower().split()[0]) if task else "scenario"
-                merged_path = f"./generated/merged_actions_{scenario_name}.json"
-                merged_actions = ActionService.get_instance().actions
-                from ..tools.file_system_tools import save_json_to_file
-                save_json_to_file(merged_path, merged_actions)
-                logger.info(f"Merged actions saved to {merged_path} via save_json_to_file (using ActionService singleton)")
+                path = ActionService.get_instance().save_merged_actions_with_prompt(task)
+                logger.info(f"Merged actions saved to {path} via ActionService.save_merged_actions_with_prompt")
             except Exception as final_exc:
                 logger.error(f"Failed to save merged actions: {final_exc}")
             # --- End final block ---
