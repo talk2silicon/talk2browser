@@ -22,20 +22,20 @@ if level > logging.DEBUG:
     logging.getLogger("httpcore").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.INFO)
 
-TASK = """
-Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
-"""
+import argparse
 
-TASK2 = """
-Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name.
-https://www.tiktokv.com/share/video/7470981717659110678/ 
-"""
+TASKS = {
+    "replay": "replay ./generated/merged_actions_navigate.json",
+    "booking": "Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/",
+    "tiktok": "Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name. https://www.tiktokv.com/share/video/7470981717659110678/",
+    "dict": "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then buy Sauce Labs Backpack"
+}
 
-TASK3 = """
- replay ./generated/merged_actions_go.json
-"""
-
-
+def get_selected_task():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", choices=TASKS.keys(), default="replay", help="Task to run (default: replay)")
+    args = parser.parse_args()
+    return TASKS[args.task].strip()
 
 async def main():
     """Test the BrowserAgent with a Sauce Demo login flow."""
@@ -46,49 +46,31 @@ async def main():
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise ValueError("ANTHROPIC_API_KEY environment variable is required")
     
+    task = get_selected_task()
+    task_name = task.split()[0]
+    print(f"[test_agent.py] Running task: {task}")
+
     try:
         # Create and run the agent
         async with BrowserAgent(headless=False) as agent:
-            # Step 1: Navigate to Sauce Demo
-            print("\n" + "="*80)
-            print("STEP 1: Navigate to Sauce Demo")
+            if task_name == "dict":
+                # Configure sensitive data for this task
+                sensitive_data = {
+                    "company_username": "standard_user",
+                    "company_password": "secret_sauce"
+                }
+                SensitiveDataService.configure(sensitive_data)
+                svc = getattr(SensitiveDataService, "_instance", None)
+                if svc is None:
+                    print("[test_agent.py] SensitiveDataService._instance is None!")
+                else:
+                    print(f"[test_agent.py] After configure: id={id(svc)} keys={list(getattr(svc, '_secrets', {}).keys())}")
+            response = await agent.run(task)
+            print("\nAgent response:")
+            print(response)
             print("="*80)
-            # --- ENV VAR secret injection example ---
-            print("\n" + "="*80)
-            print("TEST 1: ENV VAR SECRET INJECTION")
+            print("TEST COMPLETED!")
             print("="*80)
-            env_prompt = "Navigate to https://www.saucedemo.com and login with ${SAUCE_USER}/${SAUCE_PASS} and then buy Sauce Labs Backpack"
-            response_env = await agent.run(env_prompt)
-            print("\nAgent response (env vars):")
-            print(response_env)
-            print("="*80)
-
-            # --- sensitive_data dict injection example ---
-            print("\n" + "="*80)
-            print("TEST 2: sensitive_data DICT INJECTION")
-            print("="*80)
-            sensitive_data = {
-                "company_username": "standard_user",
-                "company_password": "secret_sauce"
-            }
-            # IMPORTANT: Use ${...} placeholders so the LLM/tool layer will pass these to the resolver!
-            SensitiveDataService.configure(sensitive_data)
-            # Debug log from test script
-            svc = getattr(SensitiveDataService, "_instance", None)
-            if svc is None:
-                print("[test_agent.py] SensitiveDataService._instance is None!")
-            else:
-                print(f"[test_agent.py] After configure: id={id(svc)} keys={list(getattr(svc, '_secrets', {}).keys())}")
-            dict_prompt = "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then buy Sauce Labs Backpack"
-            logging.debug("Running dict_prompt: %s", dict_prompt)
-            #response_dict = await agent.run(dict_prompt)
-            print("\nAgent response (sensitive_data dict):")
-            print(response_dict)
-            print("="*80)
-
-            print("SAUCE DEMO LOGIN TEST COMPLETED!")
-            print("="*80)
-            
     except Exception as e:
         print(f"\nError during test execution: {str(e)}")
         import traceback

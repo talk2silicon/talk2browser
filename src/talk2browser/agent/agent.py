@@ -298,7 +298,7 @@ class BrowserAgent:
                 state["messages"].append(msg)
             logger.debug(f"[Agent] Message state after manual action injection: {state['messages']}")
         messages = state["messages"]
-        
+
         try:
             # Get page state
             logger.info("Getting current page state")
