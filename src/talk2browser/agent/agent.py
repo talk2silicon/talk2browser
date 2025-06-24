@@ -29,6 +29,7 @@ from ..tools import (
     navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html,
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder
 )
+from ..tools.script_tools import load_test_data
 from ..services.action_service import ActionService  # Ensure this is at the top
 from ..services.sensitive_data_service import SensitiveDataService
 
@@ -53,7 +54,8 @@ TOOLS = [
     generate_script,
     generate_negative_tests,
     replay_action_json_with_playwright,
-    list_files_in_folder
+    list_files_in_folder,
+    load_test_data
 ]
 def _tool_display_name(tool):
     return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
@@ -77,6 +79,13 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser
 - Never prompt the user for secret values, even if a secret is missing. Always assume that the agent or tool layer will handle secret resolution or user interaction.
 - Do not mention secrets or placeholders in your output to the user.
 - If a secret is missing, simply proceed as if the action was attempted, and do not ask the user for any sensitive information.
+
+## File-based Test Data Injection:
+- If the user mentions any file containing test data (e.g., "Use test data from ./data/login_data.json"), call the `load_test_data` tool with the provided file path.
+- The file may be JSON, CSV, TXT, or any other text file. The tool will automatically parse JSON and return plain text for other types.
+- Use the returned data as additional context for all subsequent tool calls and reasoning.
+- If test data is provided both inline and via file, prefer the most recent or most complete data.
+- If the file cannot be loaded, inform the user and proceed with what data is available.
 
 ## Core Capabilities:
 - Web navigation (URLs, links, buttons, forms)

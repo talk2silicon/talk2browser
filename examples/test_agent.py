@@ -25,6 +25,7 @@ if level > logging.DEBUG:
 import argparse
 
 TASKS = {
+    "filedata": "Navigate to https://www.saucedemo.com and login using the test data in ./data/login_data.json",
     "replay": "replay ./generated/merged_actions_navigate.json",
     "booking": "Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/",
     "tiktok": "Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name. https://www.tiktokv.com/share/video/7470981717659110678/",
@@ -33,7 +34,8 @@ TASKS = {
 
 def get_selected_task():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", choices=TASKS.keys(), default="replay", help="Task to run (default: replay)")
+    # Default task is filedata to demonstrate file-based test data loading
+    parser.add_argument("--task", choices=TASKS.keys(), default="filedata", help="Task to run (default: filedata)")
     args = parser.parse_args()
     return TASKS[args.task].strip()
 

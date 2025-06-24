@@ -87,6 +87,38 @@ from langchain_core.tools import tool
 import json, os, re, logging, asyncio
 
 @tool
+def load_test_data(file_path: str) -> dict:
+    """
+    Load test data from any text file and return its content.
+    Automatically detects file type from extension and parses accordingly.
+    Args:
+        file_path: Path to the file containing test data (JSON, TXT, CSV, etc.)
+    Returns:
+        dict with 'file_type', 'data' if successful, or 'error' if failure.
+    """
+    logger = logging.getLogger("talk2browser.tools.file_system_tools")
+    if not os.path.exists(file_path):
+        logger.error(f"[load_test_data] File not found: {file_path}")
+        return {"error": f"File not found: {file_path}"}
+    try:
+        file_ext = os.path.splitext(file_path)[1].lower()
+        with open(file_path, "r", encoding="utf-8") as f:
+            if file_ext == ".json":
+                data = json.load(f)
+                file_type = "json"
+            else:
+                data = f.read()
+                file_type = file_ext.lstrip(".") or "text"
+        logger.info(f"[load_test_data] Loaded {file_type} test data from {file_path}")
+        return {
+            "file_type": file_type,
+            "data": data
+        }
+    except Exception as e:
+        logger.error(f"[load_test_data] Error loading data from {file_path}: {e}")
+        return {"error": str(e)}
+
+@tool
 async def replay_action_json_with_playwright(action_json_path: str) -> str:
     """
     Backend-agnostic replay of browser actions from a JSON file using Playwright.
