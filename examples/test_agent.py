@@ -29,7 +29,9 @@ TASKS = {
     "replay": "replay ./generated/merged_actions_navigate.json",
     "booking": "Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/",
     "tiktok": "Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name. https://www.tiktokv.com/share/video/7470981717659110678/",
-    "dict": "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then buy Sauce Labs Backpack"
+    "dict": "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then buy Sauce Labs Backpack",
+    "captcha": "Go to https://captcha.com/demos/features/captcha-demo.aspx and solve the captcha",
+    "coder": "Go to https://www.programiz.com/python-programming/online-compiler/ and write a simple calculator program in the online code editor. Then execute the code and suggest improvements if there are any errors."
 }
 
 def get_selected_task():

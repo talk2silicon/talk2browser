@@ -27,7 +27,8 @@ from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
     navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html,
-    generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder
+    generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
+    set_code_in_editor
 )
 from ..tools.script_tools import load_test_data
 from ..services.action_service import ActionService  # Ensure this is at the top
@@ -55,7 +56,8 @@ TOOLS = [
     generate_negative_tests,
     replay_action_json_with_playwright,
     list_files_in_folder,
-    load_test_data
+    load_test_data,
+    set_code_in_editor
 ]
 def _tool_display_name(tool):
     return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
@@ -92,6 +94,19 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser
 - Form filling and submission
 - Content extraction and summarization
 - Multi-step task execution
+
+## Code Editor Automation:
+- When you need to enter code into an online code editor (such as Ace, Monaco, or CodeMirror), use the set_code_in_editor tool instead of fill.
+- set_code_in_editor accepts:
+    - selector: The CSS selector for the editor container (e.g., .ace_editor, .monaco-editor)
+    - code: The code string to inject into the editor
+- Only use fill for standard <input>, <textarea>, or contenteditable fields.
+- If you encounter an element that looks like a code editor (e.g., a <div> with code-like content or editor-specific classes) but is not an input/textarea/contenteditable, always try set_code_in_editor first, even if you are unsure of the editor type.
+
+Example:
+- If asked to enter code into <input id="code-box">, use fill.
+- If asked to enter code into <div class="monaco-editor"> or <div class="ace_editor">, use set_code_in_editor.
+- If fill fails on a non-input element that appears to be a code editor, retry using set_code_in_editor.
 
 ## Guidelines:
 1. When a full URL is provided, use page_goto to navigate directly to that URL
