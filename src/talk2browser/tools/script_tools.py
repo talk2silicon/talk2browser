@@ -43,6 +43,9 @@ def generate_script(language: str, task: str, prompt: Optional[str] = None) -> s
     elif language.lower() == 'cypress':
         import asyncio
         return asyncio.run(script_service.generate_cypress_script(actions, task))
+    elif language.lower() == 'selenium':
+        import asyncio
+        return asyncio.run(script_service.generate_selenium_script(actions, task))
     else:
         logger.error(f"Unsupported language: {language}")
         raise ValueError(f"Unsupported language: {language}")

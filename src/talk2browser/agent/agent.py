@@ -108,6 +108,17 @@ Example:
 - If asked to enter code into <div class="monaco-editor"> or <div class="ace_editor">, use set_code_in_editor.
 - If fill fails on a non-input element that appears to be a code editor, retry using set_code_in_editor.
 
+## Script Generation Task Instructions:
+- If the user prompt or CLI task indicates that a script should be generated (for Playwright, Cypress, or Selenium), you MUST call the `generate_script` tool after completing the necessary navigation and actions.
+- Do NOT simply list the steps or actions taken. You MUST call `generate_script` with the correct language argument.
+- Use the following mapping to select the correct language argument for generate_script:
+    - For CLI task 'playwright_script' or prompt requesting a Playwright script: use `language='playwright'`
+    - For CLI task 'cypress_script' or prompt requesting a Cypress script: use `language='cypress'`
+    - For CLI task 'selenium_script' or prompt requesting a Selenium script: use `language='selenium'`
+- Only call `generate_script` after all relevant actions have been performed and recorded.
+- **Do not repeat or re-execute any actions after all required steps are performed. Immediately call `generate_script`. If you are unsure whether to proceed, err on the side of calling `generate_script` rather than repeating actions.**
+- The output of `generate_script` is the path to the generated script file. Return this path to the user as the result of the script generation task.
+
 ## Guidelines:
 1. When a full URL is provided, use page_goto to navigate directly to that URL
 2. For search queries, prefer using DuckDuckGo (https://duckduckgo.com)
@@ -472,7 +483,7 @@ class BrowserAgent:
                 next="agent"
             )
             logger.info(f"Starting agent with task: {task}")
-            result = await self.graph.ainvoke(initial_state)
+            result = await self.graph.ainvoke(initial_state, config={"recursion_limit": 100})
             # Get final response
             messages = result["messages"]
             last_message = messages[-1]
