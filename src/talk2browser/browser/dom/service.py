@@ -151,16 +151,11 @@ class DOMService:
     """Service for interacting with the page DOM using buildDomTree.js."""
     
     def __init__(self, page: Page):
-        """Initialize the DOM service.
-        
-        Args:
-            page: The Playwright page to work with
-        """
+        """Initialize the DOM service with a persistent element history map."""
         self.page = page
-        self._interactive_elements: List[DOMElement] = []
-        self._element_map: Dict[str, str] = {}  # Maps #hash -> xpath
+        self._element_history_map: Dict[str, DOMElement] = {}
+        self._last_page_url: Optional[str] = None
         self._build_dom_tree_js = None
-        
         # Load buildDomTree.js script
         script_path = os.path.join(os.path.dirname(__file__), 'buildDomTree.js')
         try:
@@ -169,21 +164,23 @@ class DOMService:
                 logger.debug('Successfully loaded buildDomTree.js')
         except Exception as e:
             logger.error('Failed to load buildDomTree.js: %s', e)
-            raise ValueError(f'Could not load buildDomTree.js from {script_path}') from e          
+            raise ValueError(f'Could not load buildDomTree.js from {script_path}') from e
             
     async def get_interactive_elements(self, highlight: bool = False) -> List[DOMElement]:
-        """Get all interactive elements on the page with their hashes."""
+        """Get all interactive elements on the page using a persistent history map."""
         logger.info('Scanning page for interactive elements...')
-        
         try:
-            # Get fresh DOM tree
+            current_url = self.page.url if isinstance(self.page.url, str) else await self.page.url
+            if self._last_page_url != current_url:
+                self._element_history_map.clear()
+                logger.debug(f"Page reload detected (old: {self._last_page_url}, new: {current_url}), cleared element history map.")
+            self._last_page_url = current_url
+
             dom_tree = await self.get_dom_tree(highlight_elements=highlight)
-            
-            # Clear previous state
-            self._interactive_elements = []
-            self._element_map = {}
-            
-            # Process interactive elements
+            if not dom_tree or 'map' not in dom_tree:
+                logger.error('Invalid DOM tree response')
+                return []
+
             for elem_id, elem_data in dom_tree['map'].items():
                 if elem_data.get('isInteractive'):
                     element = DOMElement(
@@ -197,35 +194,31 @@ class DOMService:
                         bounds=elem_data.get('bounds'),
                         highlight_index=elem_data.get('highlightIndex'),
                     )
-                    
-                    # Store element with full hash
-                    element_hash = f"#{element.element_hash}"
-                    self._element_map[element_hash] = element.xpath
-                    logger.debug(f"Added element to map: {element.tag_name} - {element_hash} -> {element.xpath}")
-                    
-                    self._interactive_elements.append(element)
-            
-            logger.info(f"Found {len(self._interactive_elements)} elements, map size: {len(self._element_map)}")
-            return self._interactive_elements
-            
+                    h = element.element_hash
+                    if h in self._element_history_map:
+                        self._element_history_map[h].__dict__.update(element.__dict__)
+                        logger.debug(f"Element updated in history: {h}")
+                    else:
+                        self._element_history_map[h] = element
+                        logger.debug(f"Element added to history: {h}")
+            logger.info(f"History map size after scan: {len(self._element_history_map)}")
+            return list(self._element_history_map.values())
         except Exception as e:
             logger.error(f"Error getting interactive elements: {e}", exc_info=True)
             return []
         
     async def find_element_by_hash(self, element_hash: str) -> Optional[DOMElement]:
-        """Find an interactive element by its hash.
-        
-        Args:
-            element_hash: The hash of the element to find
-            
-        Returns:
-            The matching DOMElement or None if not found
-        """
-        if not self._interactive_elements:
+        """Find an interactive element by its hash using the persistent history map."""
+        h = element_hash.lstrip('#')
+        if not self._element_history_map:
             await self.get_interactive_elements()
-            
-        return self._element_map.get(element_hash)
-        
+        element = self._element_history_map.get(h)
+        if element:
+            logger.debug(f"Found element by hash: {h}")
+        else:
+            logger.warning(f"Element with hash {h} not found in history map.")
+        return element
+
     async def get_interactive_elements(self, highlight: bool = False) -> List[DOMElement]:
         """Get all interactive elements on the page with their hashes using buildDomTree.js.
         
@@ -284,48 +277,30 @@ class DOMService:
             return []
         
     async def click_element_by_hash(self, element_hash: str) -> bool:
-        """Click an element by its hash.
-        
-        Args:
-            element_hash: The hash of the element to click (with or without # prefix)
-            
-        Returns:
-            bool: True if click was successful, False otherwise
-        """
-        # Ensure hash has # prefix
-        if not element_hash.startswith('#'):
-            element_hash = f'#{element_hash}'
-            
-        # Get xpath from map
-        logger.debug(f"Looking for element with hash {element_hash}")
-        xpath = self._element_map.get(element_hash)
-        
-        if not xpath:
-            logger.warning(f"Element with hash {element_hash} not found in current map (size: {len(self._element_map)})")
-            # Try refreshing elements
+        """Click an element by its hash using the persistent history map."""
+        h = element_hash.lstrip('#')
+        logger.debug(f"Looking for element with hash {h}")
+        element = self._element_history_map.get(h)
+        if not element:
+            logger.warning(f"Element with hash {h} not found in history map (size: {len(self._element_history_map)})")
             await self.get_interactive_elements()
-            xpath = self._element_map.get(element_hash)
-            if not xpath:
-                logger.error(f"Element {element_hash} not found even after refresh")
+            element = self._element_history_map.get(h)
+            if not element:
+                logger.error(f"Element {h} not found even after refresh")
                 return False
-            
         try:
-            # Use locator for better dynamic element handling
+            xpath = element.xpath
             logger.debug(f"Found element, using xpath: {xpath}")
             locator = self.page.locator(f'xpath={xpath}')
-            
-            # Wait for element to be visible and clickable
             await locator.wait_for(state='visible', timeout=5000)
-            
-            # Scroll element into view and click
             await locator.scroll_into_view_if_needed()
             await locator.click()
-            logger.info(f"Successfully clicked element {element_hash}")
+            logger.info(f"Successfully clicked element {h}")
             return True
-            
         except Exception as e:
-            logger.error(f"Error clicking element {element_hash}: {e}", exc_info=True)
+            logger.error(f"Error clicking element {h}: {e}", exc_info=True)
             return False
+
             
     async def get_dom_tree(self, highlight_elements: bool = False, focus_element: int = -1, viewport_expansion: int = 0) -> Dict:
         """Get the complete DOM tree with interactive elements highlighted.
