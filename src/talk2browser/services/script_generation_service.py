@@ -17,7 +17,7 @@ class ScriptGenerationService:
         """
         Generate a Playwright script from the provided actions using an LLM.
         Args:
-            actions: List of action dicts (should be merged_actions from ActionService)
+            actions: List of action dicts (should be actions from ActionService)
             task: Scenario/task description
             output_path: Optional path to save the script file
         Returns:
@@ -45,6 +45,7 @@ class ScriptGenerationService:
             "You are an expert at writing Playwright scripts.\n"
             f"Task: {task}\n"
             f"Actions:\n" + "\n".join(formatted_actions) + "\n"
+            "If any action argument is a string like \"${SAUCE_USER}\", generate code that loads the value from the environment variable SAUCE_USER. For example, use os.environ[\"SAUCE_USER\"] in the fill command.\n"
             "Write a valid Playwright Python script for this scenario. Only output the code, no markdown or explanation."
         )
         self.logger.info(f"[ScriptGen] Calling LLM to generate Playwright script for: {task}")
@@ -52,6 +53,12 @@ class ScriptGenerationService:
         try:
             response = await self.llm.ainvoke(prompt)
             script = response if isinstance(response, str) else getattr(response, 'content', None) or getattr(response, 'text', None)
+            # --- Cleanup unwanted characters: remove markdown code blocks, trim whitespace ---
+            if script:
+                import re
+                script = re.sub(r'^```[a-zA-Z]*', '', script.strip())  # Remove opening code block
+                script = re.sub(r'```$', '', script.strip())         # Remove closing code block
+                script = script.strip()
             if not script:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
@@ -71,7 +78,7 @@ class ScriptGenerationService:
         """
         Generate a Cypress script from the provided actions using an LLM.
         Args:
-            actions: List of action dicts (should be merged_actions from ActionService)
+            actions: List of action dicts (should be actions from ActionService)
             task: Scenario/task description
             output_path: Optional path to save the script file
         Returns:
@@ -96,16 +103,23 @@ class ScriptGenerationService:
             else:
                 formatted_actions.append(f"{i}. {action_type} {args}")
         prompt = (
-            "You are an expert at writing Cypress test scripts.\n"
+            "You are an expert at writing Cypress scripts.\n"
             f"Task: {task}\n"
             f"Actions:\n" + "\n".join(formatted_actions) + "\n"
-            "Write a valid Cypress JavaScript test script for this scenario. Only output the code, no markdown or explanation."
+            "If any action argument is a string like \"${SAUCE_USER}\", generate code that loads the value from the environment variable SAUCE_USER. For example, use Cypress.env(\"SAUCE_USER\") in the fill command.\n"
+            "Write a valid Cypress script for this scenario. Only output the code, no markdown or explanation."
         )
         self.logger.info(f"[ScriptGen] Calling LLM to generate Cypress script for: {task}")
         self.logger.debug(f"[ScriptGen] LLM prompt: {prompt}")
         try:
             response = await self.llm.ainvoke(prompt)
             script = response if isinstance(response, str) else getattr(response, 'content', None) or getattr(response, 'text', None)
+            # --- Cleanup unwanted characters: remove markdown code blocks, trim whitespace ---
+            if script:
+                import re
+                script = re.sub(r'^```[a-zA-Z]*', '', script.strip())
+                script = re.sub(r'```$', '', script.strip())
+                script = script.strip()
             if not script:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
@@ -123,7 +137,7 @@ class ScriptGenerationService:
         """
         Generate a Selenium script from the provided actions using an LLM.
         Args:
-            actions: List of action dicts (should be merged_actions from ActionService)
+            actions: List of action dicts (should be actions from ActionService)
             task: Scenario/task description
             output_path: Optional path to save the script file
         Returns:
@@ -151,6 +165,7 @@ class ScriptGenerationService:
             "You are an expert at writing Selenium test scripts in Python.\n"
             f"Task: {task}\n"
             f"Actions:\n" + "\n".join(formatted_actions) + "\n"
+            "If any action argument is a string like \"${SAUCE_USER}\", generate code that loads the value from the environment variable SAUCE_USER. For example, use os.environ[\"SAUCE_USER\"] in the fill command.\n"
             "Write a valid Selenium Python script for this scenario. Only output the code, no markdown or explanation."
         )
         self.logger.info(f"[ScriptGen] Calling LLM to generate Selenium script for: {task}")
@@ -158,6 +173,12 @@ class ScriptGenerationService:
         try:
             response = await self.llm.ainvoke(prompt)
             script = response if isinstance(response, str) else getattr(response, 'content', None) or getattr(response, 'text', None)
+            # --- Cleanup unwanted characters: remove markdown code blocks, trim whitespace ---
+            if script:
+                import re
+                script = re.sub(r'^```[a-zA-Z]*', '', script.strip())
+                script = re.sub(r'```$', '', script.strip())
+                script = script.strip()
             if not script:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")

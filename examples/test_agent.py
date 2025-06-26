@@ -27,7 +27,7 @@ import argparse
 TASKS = {
     "selenium": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Selenium script for these actions.",
     "cypress": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Cypress script for these actions.",
-    "playwright": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Playwright script for these actions.",
+    "playwright": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, and generate a Playwright script for these actions.",
     "filedata": "Navigate to https://www.saucedemo.com and login using the test data in ./data/login_data.json",
     "replay": "replay ./generated/merged_actions_navigate.json",
     "booking": "Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/",

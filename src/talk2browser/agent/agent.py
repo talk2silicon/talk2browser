@@ -50,7 +50,6 @@ TOOLS = [
     fill,
     get_count,
     is_enabled,
-    list_interactive_elements,
     generate_pdf_from_html,
     generate_script,
     generate_negative_tests,
@@ -73,8 +72,16 @@ log_registered_tools()
 logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
 
 # System prompt template
-# SYSTEM_PROMPT updated: Explicitly instructs LLM to call generate_script after navigation if the task is script generation or only navigation actions are present.
-SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
+SYSTEM_PROMPT = """
+You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
+
+## Script Generation Tool Usage:
+- If the user requests a browser automation script (such as Playwright, Cypress, or Selenium), you MUST call the `generate_script` tool after completing all required browser actions.
+- Infer the script type (Playwright, Cypress, Selenium) from the user's request. For example, if the user asks for a Playwright script, use `language='playwright'`; for a Selenium script, use `language='selenium'`; for a Cypress script, use `language='cypress'`.
+- Do NOT simply list the steps or actions taken. You MUST call `generate_script` with the correct language argument as the final step.
+- Do not mention or reference CLI commands, internal task names, or implementation details in your response or reasoning.
+- Only call `generate_script` after all relevant actions have been performed and recorded.
+- The output of `generate_script` is the path to the generated script file. Return this path to the user as the result of the script generation task.
 
 ## Sensitive Data Handling Policy:
 - For any tool call that requires sensitive information (such as usernames, passwords, API keys, or any other secrets), always use the provided secret placeholder (e.g., ${company_password}) as the argument value.
@@ -107,17 +114,6 @@ Example:
 - If asked to enter code into <input id="code-box">, use fill.
 - If asked to enter code into <div class="monaco-editor"> or <div class="ace_editor">, use set_code_in_editor.
 - If fill fails on a non-input element that appears to be a code editor, retry using set_code_in_editor.
-
-## Script Generation Task Instructions:
-- If the user prompt or CLI task indicates that a script should be generated (for Playwright, Cypress, or Selenium), you MUST call the `generate_script` tool after completing the necessary navigation and actions.
-- Do NOT simply list the steps or actions taken. You MUST call `generate_script` with the correct language argument.
-- Use the following mapping to select the correct language argument for generate_script:
-    - For CLI task 'playwright_script' or prompt requesting a Playwright script: use `language='playwright'`
-    - For CLI task 'cypress_script' or prompt requesting a Cypress script: use `language='cypress'`
-    - For CLI task 'selenium_script' or prompt requesting a Selenium script: use `language='selenium'`
-- Only call `generate_script` after all relevant actions have been performed and recorded.
-- **Do not repeat or re-execute any actions after all required steps are performed. Immediately call `generate_script`. If you are unsure whether to proceed, err on the side of calling `generate_script` rather than repeating actions.**
-- The output of `generate_script` is the path to the generated script file. Return this path to the user as the result of the script generation task.
 
 ## Guidelines:
 1. When a full URL is provided, use page_goto to navigate directly to that URL
@@ -282,9 +278,9 @@ class BrowserAgent:
         
         # Check if the last message has tool calls
         if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
+            logger.info(f"[Agent] _route_tools: tool_calls present in last message: {ai_message.tool_calls}")
             return "tools"
-        
-        # No tool calls
+        logger.info("[Agent] _route_tools: No tool calls in last message, ending conversation")
         return END
 
     # --- PageManager integration methods ---
@@ -414,20 +410,28 @@ class BrowserAgent:
                     break
             if not system_found:
                 messages.insert(0, SystemMessage(content=system_content))
-            
-            logger.debug(f"Updated message history with {len(messages)} messages")
-            
-            # Bind static tools to the LLM and get response
+
+            # --- LLM Debug Logging ---
+            logger.info(f"[Agent] Registered tools: {[t.name if hasattr(t, 'name') else t.__name__ for t in TOOLS]}")
+            logger.info(f"[Agent] LLM input messages (system+user):\n{[getattr(m, 'content', str(m)) for m in messages]}")
+            logger.info(f"[Agent] System prompt (truncated to 500 chars): {system_content[:500]}")
+            # Call LLM
+            logger.info("[Agent] Calling LLM...")
             llm_with_tools = self.llm.bind_tools(TOOLS)
-            # Log full messages sent to LLM
             logger.debug(f"[Agent] LLM input messages: {[str(m) for m in messages]}")
+            try:
+                action_service = ActionService.get_instance()
+                logger.info(f"[Agent] ActionService singleton ID: {id(action_service)} in _chatbot")
+                agent_actions = action_service.get_agent_actions()
+                actions = action_service.actions
+                logger.debug(f"[Agent] Agent actions before LLM: {agent_actions}")
+                logger.debug(f"[Agent] Canonical merged actions before LLM: {actions}")
+            except Exception as e:
+                logger.warning(f"[Agent] Could not fetch agent/merged actions for logging: {e}")
             response = await llm_with_tools.ainvoke(messages)
             logger.debug(f"[Agent] LLM response: {response}")
-            # If response has tool_calls, log them
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 logger.info(f"[Agent] LLM tool calls: {response.tool_calls}")
-            
-            # Info mode: log tool selection step
             if self.info_mode and hasattr(response, 'tool_calls') and response.tool_calls:
                 tools_used = [call['name'] if isinstance(call, dict) else getattr(call, 'name', str(call)) for call in response.tool_calls]
                 step = f"Step: LLM decided to use tool(s): {', '.join(tools_used)}"

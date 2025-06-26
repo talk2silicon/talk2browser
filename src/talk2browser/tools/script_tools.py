@@ -8,12 +8,7 @@ from langchain_anthropic import ChatAnthropic
 from ..agent.llm_singleton import get_llm
 from ..services.action_service import ActionService
 
-action_service = ActionService.get_instance()
-
 logger = logging.getLogger(__name__)
-
-
-
 
 @tool
 def generate_script(language: str, task: str, prompt: Optional[str] = None) -> str:
@@ -26,29 +21,46 @@ def generate_script(language: str, task: str, prompt: Optional[str] = None) -> s
     Returns:
         Path to the generated script file.
     """
-    from ..services.script_generation_service import ScriptGenerationService
-    actions = action_service.get_merged_actions()
-    if not actions:
-        logger.error("No merged actions available in ActionService for script generation.")
-        raise ValueError("No merged actions available.")
-    llm = get_llm()
-    script_service = ScriptGenerationService(llm=llm)
-    actions = action_service.actions
-    logger.info(f"[ScriptTools] Using canonical merged actions for script generation: {json.dumps(actions, indent=2)}")
-    logger.info(f"[ScriptTools] Generating {language} script for scenario: {task}")
-    logger.debug(f"[ScriptTools] Actions for script generation: {json.dumps(actions, indent=2)}")
-    if language.lower() == 'playwright':
-        import asyncio
-        return asyncio.run(script_service.generate_playwright_script(actions, task))
-    elif language.lower() == 'cypress':
-        import asyncio
-        return asyncio.run(script_service.generate_cypress_script(actions, task))
-    elif language.lower() == 'selenium':
-        import asyncio
-        return asyncio.run(script_service.generate_selenium_script(actions, task))
-    else:
-        logger.error(f"Unsupported language: {language}")
-        raise ValueError(f"Unsupported language: {language}")
+    # Get the singleton instance directly
+    action_service = ActionService.get_instance()
+    # Log the singleton instance ID for debugging
+    logger.info(f"[ScriptTools] ActionService singleton ID: {id(action_service)} in generate_script")
+    logger.info(f"[ScriptTools] ENTER generate_script: language={language}, task={task}, prompt={prompt}")
+    try:
+        from ..services.script_generation_service import ScriptGenerationService
+        logger.debug(f"[ScriptTools] generate_script called. Checking action_service registration: {action_service}")
+        actions = action_service.actions
+        if not actions:
+            logger.error("No actions available in ActionService for script generation.")
+            raise ValueError("No actions available.")
+        llm = get_llm()
+        logger.debug(f"[ScriptTools] Got LLM instance: {llm}")
+        script_service = ScriptGenerationService(llm=llm)
+        logger.info(f"[ScriptTools] Using canonical actions for script generation: {json.dumps(actions, indent=2)}")
+        logger.info(f"[ScriptTools] Generating {language} script for scenario: {task}")
+        if language.lower() == 'playwright':
+            import asyncio
+            result = asyncio.run(script_service.generate_playwright_script(actions, task))
+            logger.info(f"[ScriptTools] Returning playwright script path: {result}")
+            return result
+        elif language.lower() == 'cypress':
+            import asyncio
+            result = asyncio.run(script_service.generate_cypress_script(actions, task))
+            logger.info(f"[ScriptTools] Returning cypress script path: {result}")
+            return result
+        elif language.lower() == 'selenium':
+            import asyncio
+            result = asyncio.run(script_service.generate_selenium_script(actions, task))
+            logger.info(f"[ScriptTools] Returning selenium script path: {result}")
+            return result
+        else:
+            logger.error(f"[ScriptTools] Unsupported language: {language}")
+            raise ValueError(f"Unsupported language: {language}")
+    except Exception as exc:
+        logger.error(f"[ScriptTools] Exception in generate_script: {exc}", exc_info=True)
+        raise
+    finally:
+        logger.info(f"[ScriptTools] EXIT generate_script for language={language}, task={task}")
 
 
 @tool
