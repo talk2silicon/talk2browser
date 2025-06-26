@@ -25,15 +25,42 @@ if level > logging.DEBUG:
 import argparse
 
 TASKS = {
-    "cit": "Go to https://cit.edu.au/ and search for Automotive Electrical Technology course and create a pdf with entry requirements.",
+    "eat": (
+    "Go to https://www.ubereats.com/au. "
+    "Set the delivery address as 65 Stowport Avenue, Crace. "
+    "After entering the address, wait for the delivery time dropdown to appear. "
+    "Select 'Deliver now' from the dropdown (do not proceed until it is selected). "
+    "Click the 'Find Food' button to proceed. "
+    "After clicking 'Find Food', wait for the restaurant list/results to appear. If the restaurant list does not appear within a reasonable time, log all visible interactive elements and their hashes for debugging and stop. "
+    "Only attempt to click a hash that is present in the current list of interactive elements. "
+    "Search for the 'KFC' restaurant NEAR 65 Stowport Avenue, Crace (Canberra). If multiple KFCs are shown, select the one closest to the delivery address. "
+    "If KFC is not found, log all visible restaurant options and their hashes, then stop with an error. "
+    "Once on the KFC menu page for your area, add the 'Zinger® Burger Box Hot & Crispy' to the cart (it's $16.45, 4303 kJ). "
+    "If the item is not found or unavailable, log an error and stop. "
+    "Go to the checkout page. "
+    "The box includes: Zinger Burger, 2 pieces of Hot & Crispy™ Boneless, chippies, regular Potato & Gravy, and a drink."
+    ),
+    "cit": "Go to https://cit.edu.au/ and search for Automotive Electrical Technology course and its Related Courses into a pdf",
     "selenium": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Selenium script for these actions.",
     "cypress": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Cypress script for these actions.",
     "playwright": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, and generate a Playwright script for these actions.",
     "filedata": "Navigate to https://www.saucedemo.com and login using the test data in ./data/login_data.json",
     "replay": "replay ./generated/merged_actions_navigate.json",
     "booking": "Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/",
-    "tiktok": "Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name. https://www.tiktokv.com/share/video/7470981717659110678/",
+    "tiktok": "Go to this tiktok video url, open it and extract the @username from the resulting url. Then do a websearch for this username to find all his social media profiles. Return me the links to the social media profiles with the platform name. https://www.tiktokv.com/share/video/7470981717659110678/, finally create a nice looking pdf with the social media profiles.",
     "dict": "Navigate to https://www.saucedemo.com and login with ${company_username}/${company_password} and then add to cart and checkout",
+    "airbnb": (
+        "Go to https://www.airbnb.com.au/. "
+        "Search for 'Batemans Bay' as the location. "
+        "Set the check-in date to July 5th, 2025 and check-out date to July 7th, 2025. "
+        "Set the number of guests to 2. "
+        "Wait for the search results to load. "
+        "Find the listing named 'Garden Bay Beach Getaway - \"The Beach Shack\"'. "
+        "Open the listing page. "
+        "Extract all available details (title, price, description, amenities, etc.) from the listing. "
+        "Create a PDF file with the details of this listing. "
+        "If the listing is not found, log all visible listing options and their hashes, then stop with an error."
+    ),
     "captcha": "Go to https://captcha.com/demos/features/captcha-demo.aspx and solve the captcha",
     "coder": "Go to https://www.programiz.com/python-programming/online-compiler/ and write a simple calculator program in the online code editor. Then execute the code and suggest improvements if there are any errors.",
     "migros": """

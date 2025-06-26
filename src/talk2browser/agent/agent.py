@@ -26,7 +26,7 @@ from ..browser.dom.service import DOMService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
-    navigate, click, fill, get_count, is_enabled, list_interactive_elements, generate_pdf_from_html,
+    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html,
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
     set_code_in_editor
 )
@@ -50,6 +50,7 @@ TOOLS = [
     fill,
     get_count,
     is_enabled,
+    list_suggestions,
     generate_pdf_from_html,
     generate_script,
     generate_negative_tests,
@@ -58,6 +59,7 @@ TOOLS = [
     load_test_data,
     set_code_in_editor
 ]
+logger.info(f"[Agent] TOOLS registered: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
 def _tool_display_name(tool):
     return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
 def log_registered_tools():
@@ -76,7 +78,11 @@ SYSTEM_PROMPT = """
 You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
 
 ## Search & Dropdown Handling:
-- After filling a search field or typing into an input that triggers a dropdown or autocomplete, always wait for the dropdown/results to appear, then click the correct result (e.g., matching the intended value or course name) before proceeding to the next step. If no result appears, retry or suggest alternatives.
+- After filling a search field or typing into an input that triggers a dropdown or autocomplete, you MUST call the `list_suggestions` tool to enumerate all visible dropdown or autocomplete options.
+- Always select/click the correct option (by label or intended value) from the suggestions using its stable hash before proceeding to the next step.
+- Add debug logging after calling `list_suggestions` and after selection to record visible options and the selected value/hash.
+- If no result appears, retry or suggest alternatives, and log all visible suggestions for debugging.
+- If the target element for fill is not an <input>, <textarea>, <select>, or [contenteditable], do NOT use fill. Instead, click the element to open any associated widget (calendar, dropdown, etc.), then use list_suggestions or click/select the appropriate option. Log your reasoning and actions.
 
 ## Script Generation Tool Usage:
 - If the user requests a browser automation script (such as Playwright, Cypress, or Selenium), you MUST call the `generate_script` tool after completing all required browser actions.
@@ -104,6 +110,8 @@ You are a helpful AI assistant that can control a web browser to complete multi-
 - Form filling and submission
 - Content extraction and summarization
 - Multi-step task execution
+- Robust dropdown/autocomplete handling using `list_suggestions` and stable hashes
+- PDF generation with complete content extraction
 
 ## Code Editor Automation:
 - When you need to enter code into an online code editor (such as Ace, Monaco, or CodeMirror), use the set_code_in_editor tool instead of fill.
@@ -126,9 +134,14 @@ Example:
 5. Use the minimal number of steps to complete the task
 6. Do not repeat actions unless necessary
 7. For multi-step tasks, complete one step at a time and verify success before proceeding
-8. When asked to find and interact with elements, first analyze the page structure
-9. If an action doesn't work as expected, try alternative approaches
-10. Always verify the result of each action before proceeding to the next step
+8. Before generating a PDF, always extract all relevant details, including:
+   - All subject details, tables, and related courses
+   - Ensure the HTML/content to be converted to PDF is complete and not truncated
+   - Add debug logging to verify the extracted content before PDF generation
+9. If the target element for fill is not an <input>, <textarea>, <select>, or [contenteditable], do NOT use fill. Instead, click the element to open any associated widget (calendar, dropdown, etc.), then use list_suggestions or click/select the appropriate option. Log your reasoning and actions.
+10. When asked to find and interact with elements, first analyze the page structure
+11. If an action doesn't work as expected, try alternative approaches
+12. Always verify the result of each action before proceeding to the next step
 
 ## Script Generation Guidance:
 - If the user task involves generating a script (e.g., Playwright, Selenium, Cypress), and you have completed the necessary navigation and exploration steps, call the generate_script tool with the recorded actions.

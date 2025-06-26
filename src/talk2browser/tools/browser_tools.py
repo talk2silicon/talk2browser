@@ -280,12 +280,31 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         else:
             std_selector = selector
             selector_type = 'css'
+        # --- Ensure selector hash is resolved and included in args for ActionService ---
+        hash_val = None
+        if browser_page and hasattr(browser_page, "get_dom_service"):
+            dom_service = browser_page.get_dom_service()
+            if dom_service:
+                # Try to resolve hash from selector
+                if selector and isinstance(selector, str):
+                    if selector.startswith('#'):
+                        hash_val = selector
+                    else:
+                        element_map = getattr(dom_service, '_element_map', {})
+                        for h, sel in element_map.items():
+                            if sel == selector:
+                                hash_val = h
+                                break
+        logger.debug(f"[click] Resolved hash for selector '{selector}': {hash_val}")
         args = {"selector": std_selector, "selector_type": selector_type, "timeout": timeout}
+        if hash_val:
+            args["hash"] = hash_val
         action_data = {
             "type": "click",
             "args": args
         }
         ActionService.get_instance().record_agent_action(action_data)
+        logger.info(f"[click] Recorded click action: {action_data}")
         logger.debug(f"[browser_tools] Agent actions after click: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after click: {ActionService.get_instance().actions}")
         await capture_screenshot_for_action(page, "click", logger, success=True)
@@ -390,9 +409,8 @@ async def fill(selector: str, text: str, **kwargs) -> str:
     except Exception as e:
         error_msg = f"Failed to fill field {selector}: {str(e)}"
         logger.error(error_msg)
-        await capture_screenshot_for_action(page, "fill", logger, success=False)
-        await handle_tool_exception(page, selector, error_msg, logger)
-        return f"Error: {error_msg}"
+        from .handle_tool_exception import handle_tool_exception
+        return await handle_tool_exception(page, selector, error_msg, logger, screenshot_prefix="fill")
 
 @tool
 @resolve_hash_args
@@ -634,6 +652,85 @@ async def screenshot(selector: str = None, path: str = None, **kwargs) -> str:
 async def list_interactive_elements() -> str:
     """List interactive elements on the page. (Internal service, not an LLM tool.)"""
     pass
+
+
+# --- LLM Tool: List Suggestions for Dropdown/Autocomplete ---
+from langchain.tools import tool
+
+@tool
+@resolve_hash_args
+async def list_suggestions(container_selector: str, option_selector: str = None, **kwargs) -> str:
+    """
+    List all visible dropdown/autocomplete/rich suggestion options in a container.
+    Args:
+        container_selector: Selector/hash for the dropdown/autocomplete container.
+        option_selector: Optional, selector for individual options (default: direct children).
+    Returns:
+        JSON list of {label, hash, has_link, link_text, link_hash}
+    """
+    import json, logging
+    logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    if not browser_page:
+        logger.error("No active browser page found in PageManager.")
+        return json.dumps({"error": "No active browser page."})
+    page = browser_page.get_page()
+    dom_service = browser_page.get_dom_service() if hasattr(browser_page, "get_dom_service") else None
+
+    try:
+        option_selector = option_selector or "> *"
+        locator = page.locator(f"{container_selector} {option_selector}")
+        count = await locator.count()
+        logger.info(f"[list_suggestions] Found {count} options in {container_selector}")
+        suggestions = []
+        for idx in range(count):
+            option = locator.nth(idx)
+            try:
+                label = await option.inner_text()
+            except Exception as e:
+                logger.warning(f"[list_suggestions] Failed to get label for option {idx}: {e}")
+                label = ""
+            # Try to get hash for this option
+            hash_val = None
+            if dom_service:
+                try:
+                    # Try to extract a data-t2b-hash attribute if present
+                    hash_val = await option.evaluate("el => el.getAttribute('data-t2b-hash')")
+                except Exception as e:
+                    logger.debug(f"[list_suggestions] Could not get hash for option {idx}: {e}")
+            has_link = False
+            link_text = None
+            link_hash = None
+            try:
+                link_locator = option.locator("a")
+                link_count = await link_locator.count()
+                if link_count > 0:
+                    has_link = True
+                    link = link_locator.nth(0)
+                    try:
+                        link_text = await link.inner_text()
+                    except Exception as e:
+                        logger.debug(f"[list_suggestions] Could not get link text for option {idx}: {e}")
+                    if dom_service:
+                        try:
+                            link_hash = await link.evaluate("el => el.getAttribute('data-t2b-hash')")
+                        except Exception as e:
+                            logger.debug(f"[list_suggestions] Could not get link hash for option {idx}: {e}")
+            except Exception as e:
+                logger.debug(f"[list_suggestions] No link found in option {idx}: {e}")
+            suggestions.append({
+                "label": label.strip() if label else "",
+                "hash": hash_val,
+                "has_link": has_link,
+                "link_text": link_text,
+                "link_hash": link_hash
+            })
+        logger.info(f"[list_suggestions] Suggestions: {suggestions}")
+        return json.dumps(suggestions)
+    except Exception as e:
+        logger.error(f"[list_suggestions] Failed: {e}")
+        return json.dumps({"error": str(e)})
 
 
 # --- LLM Tool: Generate PDF from HTML ---
