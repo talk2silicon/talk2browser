@@ -176,22 +176,6 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
             return match.group(0)
         return re.sub(r"\$\{(\w+)\}", repl, val)
 
-    def get_playwright_selector(args):
-        # Prefer css_selector if present and non-empty
-        if 'css_selector' in args and args['css_selector']:
-            logger.info(f"[REPLAY] Using css_selector: {args['css_selector']}")
-            return args['css_selector']
-        selector = args.get('selector')
-        if not selector:
-            logger.warning("[REPLAY] No selector found in args.")
-            return None
-        # Heuristic: XPath usually starts with '/' or 'html/'
-        if selector.strip().startswith('/') or selector.strip().startswith('html/'):
-            logger.info(f"[REPLAY] Detected XPath selector, using xpath={selector}")
-            return f"xpath={selector}"
-        logger.info(f"[REPLAY] Using selector as CSS: {selector}")
-        return selector
-
     for idx, action in enumerate(actions):
         try:
             logger.info(f"[REPLAY] -------- Action {idx} --------")
@@ -209,13 +193,13 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
                 await page.goto(url)
                 logger.info(f"[REPLAY] Navigated to {url}")
             elif action_type == 'click':
-                selector = get_playwright_selector(resolved_args)
+                selector = resolved_args.get('selector')
                 logger.info(f"[REPLAY] Clicking selector: {selector}")
                 await page.click(selector)
                 logger.info(f"[REPLAY] Clicked {selector}")
             elif action_type == 'fill':
-                selector = get_playwright_selector(resolved_args)
-                value = resolved_args.get('text') or resolved_args.get('value')
+                selector = resolved_args.get('selector')
+                value = resolved_args.get('text')
                 logger.info(f"[REPLAY] Filling selector: {selector} with value: {value}")
                 await page.fill(selector, value)
                 logger.info(f"[REPLAY] Filled {selector} with {value}")

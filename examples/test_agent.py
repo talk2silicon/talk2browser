@@ -25,6 +25,7 @@ if level > logging.DEBUG:
 import argparse
 
 TASKS = {
+    "cit": "Go to https://cit.edu.au/ and search for Automotive Electrical Technology course and create a pdf with entry requirements.",
     "selenium": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Selenium script for these actions.",
     "cypress": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Cypress script for these actions.",
     "playwright": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, and generate a Playwright script for these actions.",

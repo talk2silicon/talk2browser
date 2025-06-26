@@ -38,7 +38,7 @@ class ScriptGenerationService:
             elif action_type == 'click':
                 formatted_actions.append(f"{i}. click {args.get('selector', '<missing selector>')}")
             elif action_type == 'fill':
-                formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('value', '<missing value>')}")
+                formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('text', '<missing value>')}")
             else:
                 formatted_actions.append(f"{i}. {action_type} {args}")
         prompt = (
@@ -46,6 +46,8 @@ class ScriptGenerationService:
             f"Task: {task}\n"
             f"Actions:\n" + "\n".join(formatted_actions) + "\n"
             "If any action argument is a string like \"${SAUCE_USER}\", generate code that loads the value from the environment variable SAUCE_USER. For example, use os.environ[\"SAUCE_USER\"] in the fill command.\n"
+            "Always launch the browser with headless=False for visibility.\n"
+            "After each action, add a noticeable pause using time.sleep(1) (remember to import time at the top).\n"
             "Write a valid Playwright Python script for this scenario. Only output the code, no markdown or explanation."
         )
         self.logger.info(f"[ScriptGen] Calling LLM to generate Playwright script for: {task}")
@@ -99,7 +101,7 @@ class ScriptGenerationService:
             elif action_type == 'click':
                 formatted_actions.append(f"{i}. click {args.get('selector', '<missing selector>')}")
             elif action_type == 'fill':
-                formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('value', '<missing value>')}")
+                formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('text', '<missing value>')}")
             else:
                 formatted_actions.append(f"{i}. {action_type} {args}")
         prompt = (
@@ -158,7 +160,7 @@ class ScriptGenerationService:
             elif action_type == 'click':
                 formatted_actions.append(f"{i}. click {args.get('selector', '<missing selector>')}")
             elif action_type == 'fill':
-                formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('value', '<missing value>')}")
+                formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('text', '<missing value>')}")
             else:
                 formatted_actions.append(f"{i}. {action_type} {args}")
         prompt = (

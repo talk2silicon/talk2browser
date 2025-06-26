@@ -273,9 +273,17 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         await locator.wait_for(state='visible', timeout=timeout)
         await locator.click()
         from ..services.action_service import ActionService
+        # Standardize selector and add selector_type
+        if selector.startswith('/') or selector.startswith('html/') or selector.startswith('//'):
+            std_selector = f"xpath={selector}" if not selector.startswith('xpath=') else selector
+            selector_type = 'xpath'
+        else:
+            std_selector = selector
+            selector_type = 'css'
+        args = {"selector": std_selector, "selector_type": selector_type, "timeout": timeout}
         action_data = {
             "type": "click",
-            "args": {"selector": selector, "timeout": timeout}
+            "args": args
         }
         ActionService.get_instance().record_agent_action(action_data)
         logger.debug(f"[browser_tools] Agent actions after click: {ActionService.get_instance().agent_actions}")
@@ -347,9 +355,19 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                                     hash_val = h
                                     break
             logger.debug(f"[fill] Resolved hash for selector '{selector}': {hash_val}")
+            # Standardize selector and add selector_type
+            if selector.startswith('/') or selector.startswith('html/') or selector.startswith('//'):
+                std_selector = f"xpath={selector}" if not selector.startswith('xpath=') else selector
+                selector_type = 'xpath'
+            else:
+                std_selector = selector
+                selector_type = 'css'
+            args = {"selector": std_selector, "selector_type": selector_type, "text": text}
+            if hash_val:
+                args["hash"] = hash_val
             action_data = {
                 "type": "fill",
-                "args": {"selector": selector, "text": text, "hash": hash_val} if hash_val else {"selector": selector, "text": text}
+                "args": args
             }
             from ..services.action_service import ActionService
             ActionService.get_instance().record_agent_action(action_data)
@@ -623,7 +641,7 @@ from langchain.tools import tool
 
 @tool
 def generate_pdf_from_html(html: str, path: str = None) -> str:
-    """Generate a PDF from HTML content using Playwright. Args: html (str): HTML content. path (str, optional): Output PDF path. Returns: str: Path to the generated PDF or error message."""
+    """Generate a PDF from HTML content using Playwright. Args: html (str): HTML content. path (str, optional): Output PDF path. If a path is provided, a timestamp will be inserted before the .pdf extension. Returns: str: Path to the generated PDF or error message. All output filenames will be timestamped for uniqueness and traceability."""
     import logging
     import asyncio
     from pathlib import Path
@@ -639,9 +657,17 @@ def generate_pdf_from_html(html: str, path: str = None) -> str:
                 page = await browser.new_page()
                 await page.set_content(html)
                 output_path = path
-                if not output_path:
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                if output_path:
+                    p = Path(output_path)
+                    if p.suffix.lower() == '.pdf':
+                        output_path = str(p.with_name(f"{p.stem}_{timestamp}{p.suffix}"))
+                    else:
+                        output_path = str(p.with_name(f"{p.name}_{timestamp}"))
+                else:
                     output_path = str(Path("./generated") / f"generated_pdf_{timestamp}.pdf")
+                logger.debug(f"Final output path: {output_path}")
+                logger.info(f"PDF will be saved to {output_path}")
                 await page.pdf(path=output_path)
                 await browser.close()
                 logger.info(f"PDF generated at {output_path}")
