@@ -307,7 +307,16 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         logger.info(f"[click] Recorded click action: {action_data}")
         logger.debug(f"[browser_tools] Agent actions after click: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after click: {ActionService.get_instance().actions}")
-        await capture_screenshot_for_action(page, "click", logger, success=True)
+        screenshot_path = await capture_screenshot_for_action(page, "click", logger, success=True)
+        if screenshot_path:
+            try:
+                from ..services.vision_service import VisionService
+                from ..utils.config import is_vision_enabled
+                if is_vision_enabled():
+                    vision_results = VisionService.get_instance().analyze(screenshot_path)
+                    logger.debug(f"[browser_tools/click] Vision results for {screenshot_path}: {vision_results}")
+            except Exception as e:
+                logger.error(f"[browser_tools/click] VisionService error: {e}")
         logger.info(f"Clicked {selector}")
         return f"Clicked {selector}"
     except PlaywrightTimeoutError:
@@ -396,7 +405,16 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                 dom_service = browser_page.get_dom_service()
                 logger.debug(f"Fetched dom_service in finally block: {dom_service}")
             logger.debug(f"[browser_tools] Merged actions after fill: {ActionService.get_instance().actions}")
-            await capture_screenshot_for_action(page, "fill", logger, success=True)
+            screenshot_path = await capture_screenshot_for_action(page, "fill", logger, success=True)
+            if screenshot_path:
+                try:
+                    from ..services.vision_service import VisionService
+                    from ..utils.config import is_vision_enabled
+                    if is_vision_enabled():
+                        vision_results = VisionService.get_instance().analyze(screenshot_path)
+                        logger.debug(f"[browser_tools/fill] Vision results for {screenshot_path}: {vision_results}")
+                except Exception as e:
+                    logger.error(f"[browser_tools/fill] VisionService error: {e}")
             return f"Filled field {selector} with text: {text}"
         finally:
             if xpath:
@@ -453,12 +471,22 @@ async def type(selector: str, text: str, **kwargs) -> str:
         ActionService.get_instance().record_agent_action(action_data)
         logger.debug(f"[browser_tools] Agent actions after type: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after type: {ActionService.get_instance().actions}")
-        await capture_screenshot_for_action(page, "type", logger, success=True)
+        screenshot_path = await capture_screenshot_for_action(page, "type", logger, success=True)
+        if screenshot_path:
+            try:
+                from ..services.vision_service import VisionService
+                from ..utils.config import is_vision_enabled
+                if is_vision_enabled():
+                    vision_results = VisionService.get_instance().analyze(screenshot_path)
+                    logger.debug(f"[browser_tools/type] Vision results for {screenshot_path}: {vision_results}")
+            except Exception as e:
+                logger.error(f"[browser_tools/type] VisionService error: {e}")
         return f"Typed '{text}' into {selector}"
     except Exception as e:
         logger.error(f"Failed to type into {selector}: {e}")
         await capture_screenshot_for_action(page, "type", logger, success=False)
         return f"Error: Failed to type into {selector}: {e}"
+
 
 @tool
 @resolve_hash_args

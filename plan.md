@@ -4,11 +4,1331 @@
 Build a self-improving browser automation system for testing a specific web application, starting with Playwright functions (click, fill, navigate), learning from user interactions, saving scripts, and continuously improving test coverage and reliability.
 
 ## Recent Context
-- **Element highlighting refactor:** Only dashed border for all interactive elements (LLM context) remains. All explicit Playwright action highlight logic (blue border) has been removed from both JS and Python. The browser now relies on native browser/site focus/active cues for actions.
-- **Removed:** `.t2b-element-highlight-active` CSS, `highlight_element_for_action`, and `clear_element_action_highlight` from DOMService and all tool functions.
-- **Preserved:** `.t2b-element-highlight` for context highlighting (dashed border), with no background override (original element colors preserved).
-- **Current plan and task list updated for continuity after IDE restart.**
-- **Selenium script generation and agent debugging plan saved for future reference.**
+- # Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+Element highlighting refactor:# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+ Only dashed border for all interactive elements (LLM context) remains. All explicit Playwright action highlight logic (blue border) has been removed from both JS and Python. The browser now relies on native browser/site focus/active cues for actions.
+- # Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+Removed:# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+ `.t2b-element-highlight-active` CSS, `highlight_element_for_action`, and `clear_element_action_highlight` from DOMService and all tool functions.
+- # Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+Preserved:# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+ `.t2b-element-highlight` for context highlighting (dashed border), with no background override (original element colors preserved).
+- # Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+Current plan and task list updated for continuity after IDE restart.# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+
+- # Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+Selenium script generation and agent debugging plan saved for future reference.# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+# Project Plan: YOLOv11 UI Element Detection & VisionService Integration
+
+## Context & Previous Objectives
+- Browser automation agent using Playwright, with robust dropdown/calendar handling and PDF extraction.
+- Minimal, meaningful code changes; strong debug logging; singleton/service architecture.
+- Current tools: click, fill, type, list_interactive_elements, list_suggestions, etc.
+
+## New Objective
+Integrate YOLOv11-based UI element detection for every Playwright action. For each action:
+- Take a screenshot and store it in a singleton class.
+- Implement VisionService to run YOLOv11 on the screenshot, extract UI element metadata.
+- Enrich agent status/state with vision-derived element metadata for every agent run.
+- Ensure implementation aligns with current code structure and singleton/service conventions.
+
+## Task Breakdown
+
+### 1. Screenshot Capture & Storage
+- **For every Playwright action** (click, fill, type, etc.), capture a screenshot after the action.
+- Store the screenshot in a centralized singleton (e.g., `ScreenshotStore`).
+- Each screenshot should be associated with metadata: action type, selector/hash, timestamp, etc.
+- Singleton must be thread-safe and accessible from agent/services.
+
+### 2. VisionService Implementation
+- **Create a new `VisionService` class** (singleton pattern, similar to ActionService or DOMService).
+- VisionService responsibilities:
+    - Accept screenshot references from ScreenshotStore.
+    - Run YOLOv11 inference (using pre-trained model, e.g., via ultralytics/yolov11 or ONNX runtime).
+    - Parse YOLO output: bounding boxes, class labels, confidence scores.
+    - Return structured metadata for detected UI elements (e.g., [{label, bbox, confidence, ...}]).
+- VisionService should be decoupled from Playwright; only operates on image files/paths.
+
+### 3. Agent Status/State Enrichment
+- **After every agent run/step:**
+    - Query VisionService for latest screenshot's detected elements.
+    - Add vision-derived metadata to agent state/status (used for reasoning, logging, or LLM context).
+    - Optionally, visualize bounding boxes on screenshots for debug/inspection.
+
+### 4. Integration Points & Logging
+- Update browser_tools (click/fill/type/etc.) to call screenshot capture and store after each action.
+- Ensure all services (DOMService, ActionService, VisionService) follow singleton pattern and are accessible from agent/runner.
+- Add debug logging for:
+    - Screenshot capture and storage.
+    - YOLO inference start/end, and detected elements.
+    - Agent state enrichment with vision data.
+
+### 5. Extensibility & Minimal Change
+- No changes to agent prompt or LLM logic unless vision data is to be surfaced for reasoning.
+- All new code (ScreenshotStore, VisionService) should be in `src/talk2browser/services/` or similar.
+- Minimal changes to existing browser_tools: just add screenshot capture and VisionService hooks.
+
+## Example File/Module Layout
+- `src/talk2browser/services/screenshot_store.py`: Singleton for screenshot management.
+- `src/talk2browser/services/vision_service.py`: Singleton for YOLO inference and metadata extraction.
+- Update `src/talk2browser/tools/browser_tools.py`: Add screenshot+vision hooks to all relevant actions.
+- Update agent state/status structure to include vision metadata.
+
+## Next Steps
+1. Implement `ScreenshotStore` singleton and integrate with browser_tools.
+2. Implement `VisionService` singleton and YOLOv11 inference logic.
+3. Update agent state/status enrichment pipeline.
+4. Add debug logging and test end-to-end with a sample agent run.
+
+## Notes
+- YOLOv11 model weights/config must be available and path configurable.
+- All vision processing should be async/non-blocking to avoid slowing agent loop.
+- Vision metadata can be used for future reasoning, accessibility, or UI robustness improvements.
+
 
 ## Current Working Plan
 ### Browser Automation Refactor Plan

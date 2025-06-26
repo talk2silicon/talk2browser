@@ -77,6 +77,10 @@ logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in
 SYSTEM_PROMPT = """
 You are a helpful AI assistant that can control a web browser to complete multi-step tasks.
 
+## Vision-Based UI Element Detection:
+- You may be provided with a section titled 'Vision UI Element Detections (YOLOv11)' containing a list of UI elements (with type, bounding box, and confidence) detected by a vision model from a screenshot of the current page.
+- Use this information as additional context to help you reason about the UI, but always prefer the interactive elements hash map for tool calls.
+
 ## Search & Dropdown Handling:
 - After filling a search field or typing into an input that triggers a dropdown or autocomplete, you MUST call the `list_suggestions` tool to enumerate all visible dropdown or autocomplete options.
 - Always select/click the correct option (by label or intended value) from the suggestions using its stable hash before proceeding to the next step.
@@ -167,6 +171,8 @@ class AgentState(TypedDict):
     """State for the browser agent following LangGraph pattern."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
     next: str  # For LangGraph routing
+    # Optional vision meta-data for LLM context
+    vision: dict
 
 class BrowserAgent:
     """Agent for browser automation using LangGraph and Playwright."""
@@ -410,12 +416,41 @@ class BrowserAgent:
                 element_map_str = "\n".join(element_map_section)
             else:
                 element_map_str = "\n(No interactive elements detected on this page.)"
+            # --- Vision meta-data formatting and injection ---
+            vision_section = ""
+            try:
+                from ..services.vision_service import VisionService
+                from ..utils.config import is_vision_enabled
+                def format_vision_metadata(image_path, detections):
+                    if not detections:
+                        return "## Vision UI Element Detections (YOLOv11):\n(No UI elements detected by vision model.)"
+                    lines = ["## Vision UI Element Detections (YOLOv11):"]
+                    for d in detections:
+                        label = d.get("label", "?")
+                        bbox = d.get("bbox", [])
+                        conf = d.get("confidence", 0)
+                        lines.append(f"- [{label}] at {bbox}, confidence: {conf:.2f}")
+                    if image_path:
+                        lines.append(f"Screenshot: {image_path}")
+                    return "\n".join(lines)
+                if is_vision_enabled():
+                    vision_results = VisionService.get_instance().get_latest_results()
+                    vision_image = VisionService.get_instance().get_latest_image_path()
+                    if vision_results and vision_image:
+                        vision_section = format_vision_metadata(vision_image, vision_results)
+                        state["vision"] = {"image_path": vision_image, "detections": vision_results}
+                        logger.info(f"[Agent] Added vision data to state: {state['vision']}")
+                    else:
+                        logger.info("[Agent] Vision enabled but no results to add to state.")
+            except Exception as e:
+                logger.error(f"[Agent] Vision meta-data formatting/injection failed: {e}")
             # Create system message content
             system_content = "\n\n".join([
                 SYSTEM_PROMPT,
                 "Current page state:",
                 "\n".join(context),
-                element_map_str
+                element_map_str,
+                vision_section
             ])
             # Find and update existing system message or insert at start
             system_found = False

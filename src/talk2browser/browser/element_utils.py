@@ -44,8 +44,26 @@ async def find_interactive_elements(page: Page, max_elements: int = 100) -> List
         '[role="checkbox"]',
         '[role="radio"]',
         '[role="textbox"]',
-        '[tabindex]:not([tabindex="-1"])'
+        '[tabindex]:not([tabindex="-1"])',
+        '[onclick]',
+        '[onmousedown]',
+        '[onmouseup]',
+        '[data-action]',
+        '[data-link]',
+        '[data-click]',
+        '[style*="cursor:pointer"]',
+        '.clickable',
+        '.card',
+        '.product',
+        '.tile',
+        '.item',
+        '.btn',
+        '.link'
     ]
+
+    import logging
+    logger = logging.getLogger(__name__)
+
     
     # Find all matching elements
     elements = []
@@ -62,10 +80,11 @@ async def find_interactive_elements(page: Page, max_elements: int = 100) -> List
                 # Skip if element is not visible
                 if not await handle.is_visible():
                     continue
-                    
+
                 # Get element properties
                 element = await _get_element_properties(handle, selector)
                 if element:
+                    logger.debug(f"[find_interactive_elements] Detected element: tag={element['tag']}, text='{element['text']}', selector='{selector}', attributes={element.get('attributes',{})}")
                     elements.append(element)
         except Exception as e:
             # Skip if selector fails
@@ -81,8 +100,25 @@ async def _get_element_properties(handle: ElementHandle, selector: str) -> Optio
         tag_name = (await handle.get_property('tagName')).lower() if await handle.get_property('tagName') else ''
         text_content = (await handle.text_content() or '').strip()
         
-        # Skip if no text content and not an input
-        if not text_content and tag_name not in ('input', 'button', 'select', 'textarea'):
+        # Heuristic: Don't skip if pointer cursor, clickable class, or data-action/link/click present
+        is_likely_clickable = False
+        try:
+            style = await handle.get_attribute('style') or ''
+            classes = await handle.get_attribute('class') or ''
+            data_action = await handle.get_attribute('data-action')
+            data_link = await handle.get_attribute('data-link')
+            data_click = await handle.get_attribute('data-click')
+            if (
+                'cursor:pointer' in style or
+                any(cls in classes for cls in ['clickable','card','product','tile','item','btn','link']) or
+                data_action is not None or
+                data_link is not None or
+                data_click is not None
+            ):
+                is_likely_clickable = True
+        except Exception:
+            pass
+        if not text_content and tag_name not in ('input', 'button', 'select', 'textarea') and not is_likely_clickable:
             return None
             
         # Get common attributes
