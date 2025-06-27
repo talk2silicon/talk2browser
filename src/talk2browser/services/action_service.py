@@ -283,7 +283,7 @@ class ActionService:
             "actions": self._actions
         })
 
-    def save_merged_actions_with_prompt(self, task: str, output_dir: str = "./generated") -> str:
+    def save_merged_actions_with_prompt(self, task: str, output_dir: str = "./generated/actions") -> str:
         """
         Save merged actions to a descriptive filename based on the task and timestamp.
         Returns the full path to the saved file.

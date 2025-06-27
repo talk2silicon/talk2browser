@@ -19,7 +19,12 @@ async def handle_tool_exception(page, selector, error_msg, logger, screenshot_pr
     logger.debug(traceback.format_exc())
     screenshot_path = None
     try:
-        screenshot_path = f"generated/{screenshot_prefix}_{(selector or 'unknown').replace('/', '_').replace(' ', '_')}.png"
+        from pathlib import Path
+        screenshots_dir = Path("./screenshots")
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = str(screenshots_dir / f"{screenshot_prefix}_{(selector or 'unknown').replace('/', '_').replace(' ', '_')}_{timestamp}.png")
         await page.screenshot(path=screenshot_path)
         logger.info(f"Screenshot saved to {screenshot_path} for exception.")
     except Exception as screenshot_exc:

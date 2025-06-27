@@ -8,9 +8,6 @@ from langchain.tools import tool
 # Action recorder singleton import (shared across modules)
 
 import logging
-
-
-# Decorator to resolve hash arguments using element_map
 import functools
 
 # --- Selector Normalization Utility ---
@@ -24,7 +21,7 @@ def normalize_selector(selector: str, logger=None) -> str:
     import re
     if not selector or not isinstance(selector, str):
         return selector
-    pattern = r'^(?P<tag>\w+)?\s*:contains\(["\\'](?P<text>.+)["\\']\)$'
+    pattern = r'^(?P<tag>\w+)?\s*:contains\(["\'](?P<text>.+)["\']\)$'
     match = re.match(pattern, selector.strip())
     if match:
         tag = match.group('tag')
@@ -51,7 +48,12 @@ async def capture_screenshot_for_action(page, tool_name: str, logger, success=Tr
         from pathlib import Path
         base_name = "step"
         status = "success" if success else "fail"
-        screenshot_path = str(Path("./generated") / f"{base_name}_{tool_name}_{status}.png")
+        # Always save screenshots to ./screenshots directory
+        screenshots_dir = Path("./screenshots")
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = str(screenshots_dir / f"{base_name}_{tool_name}_{status}_{timestamp}.png")
         logger.debug(f"Attempting to save screenshot for action {tool_name} at {screenshot_path}")
         await page.screenshot(path=screenshot_path, full_page=True)
         logger.info(f"Screenshot saved to {screenshot_path} for {tool_name} (success={success})")
