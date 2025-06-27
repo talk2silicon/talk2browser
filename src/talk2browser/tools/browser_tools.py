@@ -781,16 +781,20 @@ def generate_pdf_from_html(html: str, path: str = None) -> str:
                 browser = await p.chromium.launch()
                 page = await browser.new_page()
                 await page.set_content(html)
-                output_path = path
+                from pathlib import Path
+                pdf_dir = Path("./generated/pdf")
+                pdf_dir.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                if output_path:
-                    p = Path(output_path)
-                    if p.suffix.lower() == '.pdf':
-                        output_path = str(p.with_name(f"{p.stem}_{timestamp}{p.suffix}"))
+                if path:
+                    p = Path(path)
+                    filename = p.name
+                    if filename.lower().endswith('.pdf'):
+                        filename = f"{p.stem}_{timestamp}{p.suffix}"
                     else:
-                        output_path = str(p.with_name(f"{p.name}_{timestamp}"))
+                        filename = f"{filename}_{timestamp}.pdf"
+                    output_path = str(pdf_dir / filename)
                 else:
-                    output_path = str(Path("./generated") / f"generated_pdf_{timestamp}.pdf")
+                    output_path = str(pdf_dir / f"generated_pdf_{timestamp}.pdf")
                 logger.debug(f"Final output path: {output_path}")
                 logger.info(f"PDF will be saved to {output_path}")
                 await page.pdf(path=output_path)
