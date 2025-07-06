@@ -59,10 +59,29 @@ class PlaywrightClient:
             
         # Import here to avoid circular imports
         from ..browser.dom.service import DOMService
+        import asyncio
         
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                title = await self.page.title()
+                break
+            except Exception as e:
+                if "Execution context was destroyed" in str(e) and attempt < max_retries - 1:
+                    logging.warning(f"[PlaywrightClient] page.title() failed due to navigation context destruction, retrying ({attempt+1}/{max_retries})...")
+                    await asyncio.sleep(0.5)
+                    try:
+                        await self.page.wait_for_load_state('load')
+                    except Exception:
+                        pass
+                    continue
+                else:
+                    logging.error(f"[PlaywrightClient] Failed to get page title after navigation: {e}")
+                    title = ""
+                    break
         state = {
             "url": self.page.url,
-            "title": await self.page.title(),
+            "title": title,
             "screenshot": await self.page.screenshot(type="jpeg", quality=70),
         }
         

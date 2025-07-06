@@ -418,6 +418,8 @@ class BrowserAgent:
                 element_map_str = "\n(No interactive elements detected on this page.)"
             # --- Vision meta-data formatting and injection ---
             vision_section = ""
+            screenshot_blobs = []
+            import os, base64
             try:
                 from ..services.vision_service import VisionService
                 from ..utils.config import is_vision_enabled
@@ -433,6 +435,21 @@ class BrowserAgent:
                     if image_path:
                         lines.append(f"Screenshot: {image_path}")
                     return "\n".join(lines)
+                # Attach screenshots to LLM vision input if feature flag enabled
+                if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+                    logger.info("[Agent] Screenshot-to-LLM feature flag is enabled. Preparing screenshots for LLM vision input.")
+                    agent_actions = ActionService.get_instance().get_agent_actions()
+                    # Only include screenshots from recent actions (last 3, or all if fewer)
+                    screenshots = [a.get("screenshot_path") for a in agent_actions[-3:] if a.get("screenshot_path")]
+                    logger.debug(f"[Agent] Screenshots found for LLM input: {screenshots}")
+                    for path in screenshots:
+                        try:
+                            with open(path, "rb") as imgf:
+                                img_b64 = base64.b64encode(imgf.read()).decode("utf-8")
+                                screenshot_blobs.append(img_b64)
+                                logger.info(f"[Agent] Added screenshot {path} to LLM vision input (base64, {len(img_b64)} bytes)")
+                        except Exception as e:
+                            logger.error(f"[Agent] Failed to encode screenshot {path} for LLM: {e}")
                 if is_vision_enabled():
                     vision_results = VisionService.get_instance().get_latest_results()
                     vision_image = VisionService.get_instance().get_latest_image_path()
@@ -466,20 +483,40 @@ class BrowserAgent:
             logger.info(f"[Agent] Registered tools: {[t.name if hasattr(t, 'name') else t.__name__ for t in TOOLS]}")
             logger.info(f"[Agent] LLM input messages (system+user):\n{[getattr(m, 'content', str(m)) for m in messages]}")
             logger.info(f"[Agent] System prompt (truncated to 500 chars): {system_content[:500]}")
-            # Call LLM
-            logger.info("[Agent] Calling LLM...")
+            # Prepare LLM with tools
             llm_with_tools = self.llm.bind_tools(TOOLS)
-            logger.debug(f"[Agent] LLM input messages: {[str(m) for m in messages]}")
-            try:
-                action_service = ActionService.get_instance()
-                logger.info(f"[Agent] ActionService singleton ID: {id(action_service)} in _chatbot")
-                agent_actions = action_service.get_agent_actions()
-                actions = action_service.actions
-                logger.debug(f"[Agent] Agent actions before LLM: {agent_actions}")
-                logger.debug(f"[Agent] Canonical merged actions before LLM: {actions}")
-            except Exception as e:
-                logger.warning(f"[Agent] Could not fetch agent/merged actions for logging: {e}")
-            response = await llm_with_tools.ainvoke(messages)
+            # Attach screenshots as image blocks in HumanMessage if feature flag is enabled
+            if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1" and screenshot_blobs:
+                logger.info("[Agent] Attaching screenshots to LLM input as image blocks in message content")
+                # Find the last HumanMessage (the user prompt)
+                from langchain_core.messages import HumanMessage
+                for i in range(len(messages)-1, -1, -1):
+                    if isinstance(messages[i], HumanMessage):
+                        user_msg = messages[i]
+                        break
+                else:
+                    user_msg = None
+                if user_msg and isinstance(user_msg.content, str):
+                    # Replace string content with a list of content blocks
+                    content_blocks = [{"type": "text", "text": user_msg.content}]
+                    for blob in screenshot_blobs:
+                        logger.debug(f"[Agent] Screenshot blob type: {type(blob)}, length: {len(blob) if isinstance(blob, str) else 'N/A'}")
+                        if isinstance(blob, str) and blob.strip():
+                            content_blocks.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": blob
+                                }
+                            })
+                        else:
+                            logger.error(f"[Agent] Skipping invalid screenshot blob: {blob}")
+                    logger.debug(f"[Agent] LLM HumanMessage content blocks: {content_blocks}")
+                    messages[i] = HumanMessage(content=content_blocks)
+                response = await llm_with_tools.ainvoke(messages)
+            else:
+                response = await llm_with_tools.ainvoke(messages)
             logger.debug(f"[Agent] LLM response: {response}")
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 logger.info(f"[Agent] LLM tool calls: {response.tool_calls}")

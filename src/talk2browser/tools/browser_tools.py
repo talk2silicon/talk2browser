@@ -231,12 +231,17 @@ async def navigate(url: str) -> str:
     await page.goto(url)
     title = await page.title()
     from ..services.action_service import ActionService
-    screenshot_path = await capture_screenshot_for_action(page, "navigate", logger, success=True)
+    import os
+    screenshot_path = None
+    if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+        screenshot_path = await capture_screenshot_for_action(page, "navigate", logger, success=True)
     action_data = {
         "type": "navigate",
-        "args": {"url": url},
-        "screenshot": screenshot_path
+        "args": {"url": url}
     }
+    if screenshot_path:
+        action_data['screenshot_path'] = screenshot_path
+        logger.debug(f"[browser_tools/navigate] Screenshot for LLM vision: {screenshot_path}")
     ActionService.get_instance().record_agent_action(action_data)
     logger.debug(f"[browser_tools] Agent actions after navigate: {ActionService.get_instance().agent_actions}")
     logger.debug(f"[browser_tools] Merged actions after navigate: {ActionService.get_instance().actions}")
@@ -309,7 +314,13 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         logger.info(f"[click] Recorded click action: {action_data}")
         logger.debug(f"[browser_tools] Agent actions after click: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after click: {ActionService.get_instance().actions}")
-        screenshot_path = await capture_screenshot_for_action(page, "click", logger, success=True)
+        import os
+        screenshot_path = None
+        if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+            screenshot_path = await capture_screenshot_for_action(page, "click", logger, success=True)
+            if screenshot_path:
+                action_data['screenshot_path'] = screenshot_path
+                logger.debug(f"[browser_tools/click] Screenshot for LLM vision: {screenshot_path}")
         if screenshot_path:
             try:
                 from ..services.vision_service import VisionService
@@ -407,7 +418,13 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                 dom_service = browser_page.get_dom_service()
                 logger.debug(f"Fetched dom_service in finally block: {dom_service}")
             logger.debug(f"[browser_tools] Merged actions after fill: {ActionService.get_instance().actions}")
-            screenshot_path = await capture_screenshot_for_action(page, "fill", logger, success=True)
+            import os
+            screenshot_path = None
+            if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+                screenshot_path = await capture_screenshot_for_action(page, "fill", logger, success=True)
+                if screenshot_path:
+                    action_data['screenshot_path'] = screenshot_path
+                    logger.debug(f"[browser_tools/fill] Screenshot for LLM vision: {screenshot_path}")
             if screenshot_path:
                 try:
                     from ..services.vision_service import VisionService
