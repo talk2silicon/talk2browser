@@ -194,6 +194,28 @@ class DOMService:
                         bounds=elem_data.get('bounds'),
                         highlight_index=elem_data.get('highlightIndex'),
                     )
+                    # --- Minimal enhancement: enrich attributes dict ---
+                    attributes = element.attributes
+                    # Ensure role
+                    if 'role' not in attributes:
+                        role = elem_data.get('attributes', {}).get('role')
+                        if role:
+                            attributes['role'] = role
+                    # Ensure placeholder
+                    if 'placeholder' not in attributes:
+                        placeholder = elem_data.get('attributes', {}).get('placeholder')
+                        if placeholder:
+                            attributes['placeholder'] = placeholder
+                    # Add all aria-* attributes
+                    for k, v in elem_data.get('attributes', {}).items():
+                        if k.startswith('aria-'):
+                            attributes[k] = v
+                    # Try to get associated label text from attributes if present
+                    label = elem_data.get('attributes', {}).get('label')
+                    if label:
+                        attributes['label'] = label.strip()
+                    element.attributes = attributes
+                    # --- End enhancement ---
                     h = element.element_hash
                     if h in self._element_history_map:
                         self._element_history_map[h].__dict__.update(element.__dict__)

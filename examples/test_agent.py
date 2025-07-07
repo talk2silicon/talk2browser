@@ -44,7 +44,7 @@ TASKS = {
     ),
     "uc2": (
         "Go to https://www.canberra.edu.au/. "
-        "Find resources for International students. fill the form and"
+        "Find resources for International students. fill the form with Kamal as first name, Perera as last name, kamal@abc.com as email, australia as country and press next button"
         "Download the course guide"
     ),
     "eat": (
@@ -86,6 +86,16 @@ TASKS = {
     ),
     "captcha": "Go to https://captcha.com/demos/features/captcha-demo.aspx and solve the captcha",
     "coder": "Go to https://www.programiz.com/python-programming/online-compiler/ and write a simple calculator program in the online code editor. Then execute the code and suggest improvements if there are any errors.",
+    "nrma": (
+        "Go to https://www.nrma.com.au/. "
+        "Find comprehensive car insurance. "
+        "Apply for a quote."
+    ),
+    "huggingface_top10": (
+        "Go to https://huggingface.co/models. "
+        "Sort the models by number of downloads. "
+        "Create a PDF file with the top 10 models (name, downloads, link)."
+    ),
     "migros": """
    ### Prompt for Shopping Agent – Migros Online Grocery Order
 

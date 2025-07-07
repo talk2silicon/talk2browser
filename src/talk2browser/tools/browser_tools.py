@@ -413,11 +413,12 @@ async def fill(selector: str, text: str, **kwargs) -> str:
             from ..services.action_service import ActionService
             ActionService.get_instance().record_agent_action(action_data)
             logger.info(f"[fill] Recorded fill action: {action_data}")
+            logger.debug(f"[browser_tools] Agent actions after fill: {ActionService.get_instance().agent_actions}")
+            logger.debug(f"[browser_tools] Merged actions after fill: {ActionService.get_instance().actions}")
             dom_service = None
             if browser_page and hasattr(browser_page, "get_dom_service"):
                 dom_service = browser_page.get_dom_service()
                 logger.debug(f"Fetched dom_service in finally block: {dom_service}")
-            logger.debug(f"[browser_tools] Merged actions after fill: {ActionService.get_instance().actions}")
             import os
             screenshot_path = None
             if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
@@ -623,7 +624,8 @@ async def hover(selector: str, **kwargs) -> str:
             "args": {"selector": selector}
         }
         ActionService.get_instance().record_agent_action(action_data)
-        
+        logger.debug(f"[browser_tools] Agent actions after hover: {ActionService.get_instance().agent_actions}")
+        logger.debug(f"[browser_tools] Merged actions after hover: {ActionService.get_instance().actions}")
         return f"Hovered over {selector}"
     except Exception as e:
         logger.error(f"Failed to hover over {selector}: {e}")

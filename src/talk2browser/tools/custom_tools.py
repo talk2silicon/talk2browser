@@ -63,3 +63,29 @@ async def set_code_in_editor(selector: str, code: str) -> str:
     except Exception as e:
         logger.error(f"Failed to set code in editor: {e}")
         return f"Error: Failed to set code in editor: {e}"
+
+from langchain.tools import tool
+
+@tool
+def save_json(data: dict, filename: str) -> str:
+    """
+    Save a Python dictionary as a JSON file with the given filename.
+    Args:
+        data: The dictionary to save.
+        filename: The filename (including .json) to save to.
+    Returns:
+        str: The path to the saved file.
+    """
+    import json
+    import os
+    logger = logging.getLogger(__name__)
+    try:
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=2)
+        logger.info(f"Saved JSON to {filename}")
+        return filename
+    except Exception as e:
+        logger.error(f"Failed to save JSON to {filename}: {e}")
+        return f"Error: {e}"

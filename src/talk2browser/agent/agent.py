@@ -28,7 +28,7 @@ from ..browser.page_manager import PageManager
 from ..tools import (
     navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html,
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
-    set_code_in_editor
+    set_code_in_editor, save_json
 )
 from ..tools.script_tools import load_test_data
 from ..services.action_service import ActionService  # Ensure this is at the top
@@ -57,8 +57,10 @@ TOOLS = [
     replay_action_json_with_playwright,
     list_files_in_folder,
     load_test_data,
-    set_code_in_editor
+    set_code_in_editor,
+    save_json  # <-- Added save_json tool for LLM
 ]
+logger.debug(f"[Agent] TOOLS after registration: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
 logger.info(f"[Agent] TOOLS registered: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
 def _tool_display_name(tool):
     return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__

@@ -37,6 +37,21 @@ class PlaywrightClient:
         self.page = await self.context.new_page()
         logging.info(f"Browser page created. Viewport and window size should now be set.")
 
+        # --- New Tab/Popup Handling ---
+        import uuid
+        from .page_manager import PageManager
+        from .page import BrowserPage
+
+        def _on_new_page(page):
+            page_id = str(uuid.uuid4())
+            browser_page = BrowserPage(page)
+            PageManager.get_instance().add_page(page_id, browser_page)
+            PageManager.get_instance().switch_to(page_id)
+            logging.info(f"[PlaywrightClient] New tab registered and switched: {page_id}, url={getattr(page, 'url', None)}")
+
+        self.context.on("page", _on_new_page)
+        # --- End New Tab/Popup Handling ---
+
     async def close(self) -> None:
         """Close the browser and cleanup resources."""
         if self.browser:
