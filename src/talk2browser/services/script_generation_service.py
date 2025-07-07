@@ -13,13 +13,20 @@ class ScriptGenerationService:
         self.llm = llm  # Optionally inject LLM instance
         self.logger = logger
 
-    async def generate_playwright_script(self, actions: List[Dict[str, Any]], task: str, output_path: Optional[str] = None) -> str:
+    async def generate_playwright_script(
+        self,
+        actions: List[Dict[str, Any]],
+        task: str,
+        output_path: Optional[str] = None,
+        language: str = "python"
+    ) -> str:
         """
         Generate a Playwright script from the provided actions using an LLM.
         Args:
             actions: List of action dicts (should be actions from ActionService)
             task: Scenario/task description
             output_path: Optional path to save the script file
+            language: 'python' (default) or 'typescript' for Playwright TS
         Returns:
             Path to the generated script file
         """
@@ -41,16 +48,32 @@ class ScriptGenerationService:
                 formatted_actions.append(f"{i}. fill {args.get('selector', '<missing selector>')} with {args.get('text', '<missing value>')}")
             else:
                 formatted_actions.append(f"{i}. {action_type} {args}")
-        prompt = (
-            "You are an expert at writing Playwright scripts.\n"
-            f"Task: {task}\n"
-            f"Actions:\n" + "\n".join(formatted_actions) + "\n"
-            "If any action argument is a string like \"${SAUCE_USER}\", generate code that loads the value from the environment variable SAUCE_USER. For example, use os.environ[\"SAUCE_USER\"] in the fill command.\n"
-            "Always launch the browser with headless=False for visibility.\n"
-            "After each action, add a noticeable pause using time.sleep(1) (remember to import time at the top).\n"
-            "Write a valid Playwright Python script for this scenario. Only output the code, no markdown or explanation."
-        )
-        self.logger.info(f"[ScriptGen] Calling LLM to generate Playwright script for: {task}")
+        language = language.lower()
+        if language == "typescript":
+            prompt = (
+                "You are an expert at writing Playwright test scripts in TypeScript.\n"
+                f"Task: {task}\n"
+                f"Actions:\n" + "\n".join(formatted_actions) + "\n"
+                "Requirements:\n"
+                "- Use idiomatic TypeScript, including type annotations, async/await, and modern ES module imports.\n"
+                "- Use Playwright’s test runner and fixtures (`@playwright/test`).\n"
+                "- Prefer role-based selectors (e.g., page.getByRole) when possible.\n"
+                "- Structure the script as a Playwright `.spec.ts` file, with `test()` blocks.\n"
+                "- Only output the code, no markdown or explanation."
+            )
+            ext = "spec.ts"
+        else:
+            prompt = (
+                "You are an expert at writing Playwright scripts in Python.\n"
+                f"Task: {task}\n"
+                f"Actions:\n" + "\n".join(formatted_actions) + "\n"
+                "If any action argument is a string like \"${SAUCE_USER}\", generate code that loads the value from the environment variable SAUCE_USER. For example, use os.environ[\"SAUCE_USER\"] in the fill command.\n"
+                "Always launch the browser with headless=False for visibility.\n"
+                "After each action, add a noticeable pause using time.sleep(1) (remember to import time at the top).\n"
+                "Write a valid Playwright Python script for this scenario. Only output the code, no markdown or explanation."
+            )
+            ext = "py"
+        self.logger.info(f"[ScriptGen] Calling LLM to generate Playwright {language} script for: {task}")
         self.logger.debug(f"[ScriptGen] LLM prompt: {prompt}")
         try:
             response = await self.llm.ainvoke(prompt)
@@ -64,9 +87,17 @@ class ScriptGenerationService:
             if not script:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
+
+            # --- Validate TypeScript content if requested ---
+            if language == "typescript":
+                # Basic check: look for TypeScript Playwright imports
+                if ("import { test" not in script or "from '@playwright/test'" not in script) and ("import { test" not in script or 'from "@playwright/test"' not in script):
+                    self.logger.warning("[ScriptGen] LLM output for TypeScript does not look like TypeScript. Output head:\n" + script[:200])
+                    # Optionally raise an error here if strictness is desired
+
             if output_path is None:
                 safe_task = task.lower().replace(' ', '_').replace('/', '_')[:40]
-                output_path = str(Path("./generated") / f"playwright_{safe_task}.py")
+                output_path = str(Path("./generated") / f"playwright_{safe_task}.{ext}")
             from ..tools.file_system_tools import save_text_to_file
             self.logger.debug(f"Saving Playwright script to {output_path}")
             save_text_to_file(output_path, script)

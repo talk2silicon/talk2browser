@@ -5,6 +5,14 @@ import os
 from dotenv import load_dotenv
 
 from talk2browser.utils.logging import setup_logging
+import pathlib
+
+# Ensure logs directory exists
+def ensure_log_dir():
+    log_dir = pathlib.Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    return log_dir / 'agent.log'
+
 from talk2browser.agent.agent import BrowserAgent
 from talk2browser.services.sensitive_data_service import SensitiveDataService  # <-- Added import
 
@@ -14,7 +22,9 @@ load_dotenv()
 # Set up logging from LOG_LEVEL in .env
 level_str = os.getenv("LOG_LEVEL", "INFO").upper()
 level = getattr(logging, level_str, logging.INFO)
-setup_logging(level=level)
+log_file = ensure_log_dir()
+setup_logging(level=level, log_file=str(log_file))
+print(f"[test_agent.py] Logging to file: {log_file}")
 
 # Suppress noisy DEBUG logs from external libraries unless LOG_LEVEL is DEBUG
 if level > logging.DEBUG:
@@ -25,6 +35,18 @@ if level > logging.DEBUG:
 import argparse
 
 TASKS = {
+    "uc": (
+        "Go to https://www.canberra.edu.au/. "
+        "Find resources for International students. "
+        "Select undergraduate, Bachelor of Information Technology (322AA.8). "
+        "Extract and create a PDF of the admission requirements for this course."
+        "create playwright script for these actions."
+    ),
+    "uc2": (
+        "Go to https://www.canberra.edu.au/. "
+        "Find resources for International students. fill the form and"
+        "Download the course guide"
+    ),
     "eat": (
     "Go to https://www.ubereats.com/au. "
     "Set the delivery address as 65 Stowport Avenue, Crace. "
@@ -44,6 +66,7 @@ TASKS = {
     "selenium": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Selenium script for these actions.",
     "cypress": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, add Sauce Labs Backpack to the cart, and generate a Cypress script for these actions.",
     "playwright": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, and generate a Playwright script for these actions.",
+    "playwright_ts": "Navigate to https://www.saucedemo.com, login with ${company_username}/${company_password}, and generate a Playwright TypeScript script for these actions.",
     "filedata": "Navigate to https://www.saucedemo.com and login using the test data in ./data/login_data.json",
     "replay": "replay ./generated/merged_actions_navigate.json",
     "booking": "Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/",
@@ -182,19 +205,12 @@ async def main():
     try:
         # Create and run the agent
         async with BrowserAgent(headless=False) as agent:
-            if task_name == "dict":
-                # Configure sensitive data for this task
-                sensitive_data = {
-                    "company_username": "standard_user",
-                    "company_password": "secret_sauce"
-                }
-                SensitiveDataService.configure(sensitive_data)
-                svc = getattr(SensitiveDataService, "_instance", None)
-                if svc is None:
-                    print("[test_agent.py] SensitiveDataService._instance is None!")
-                else:
-                    print(f"[test_agent.py] After configure: id={id(svc)} keys={list(getattr(svc, '_secrets', {}).keys())}")
-            response = await agent.run(task)
+            sensitive_data = {
+                "company_username": os.getenv("COMPANY_USERNAME", "standard_user"),
+                "company_password": os.getenv("COMPANY_PASSWORD", "secret_sauce")
+            }
+            print(f"[test_agent.py] Injecting sensitive_data keys: {list(sensitive_data.keys())}")
+            response = await agent.run(task, sensitive_data=sensitive_data)
             print("\nAgent response:")
             print(response)
             print("="*80)

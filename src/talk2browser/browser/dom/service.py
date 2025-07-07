@@ -201,6 +201,8 @@ class DOMService:
                     else:
                         self._element_history_map[h] = element
                         logger.debug(f"Element added to history: {h}")
+                    # Debug: Output full attributes and text for this element
+                    logger.debug(f"[ElementMap] Hash: {h} | tag: {element.tag_name} | text: '{element.text}' | attributes: {json.dumps(element.attributes)}")
             logger.info(f"History map size after scan: {len(self._element_history_map)}")
             return list(self._element_history_map.values())
         except Exception as e:

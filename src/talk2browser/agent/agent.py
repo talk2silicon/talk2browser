@@ -529,6 +529,41 @@ class BrowserAgent:
             # Check if response has tool calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 logger.info("Tool calls detected in LLM response")
+                # --- Calendar Trigger Post-Processing ---
+                try:
+                    # Only process if the last tool call is a click
+                    last_tool_call = response.tool_calls[-1] if response.tool_calls else None
+                    if last_tool_call and (getattr(last_tool_call, 'name', None) == 'click' or (isinstance(last_tool_call, dict) and last_tool_call.get('name') == 'click')):
+                        # Try to extract selector/label for calendar detection
+                        args = getattr(last_tool_call, 'args', None) or last_tool_call.get('args', {})
+                        selector = args.get('selector', '') if args else ''
+                        # Heuristic: look for calendar triggers by selector or label
+                        calendar_keywords = ['calendar', 'date', 'check in', 'check out', 'add dates']
+                        if any(k in selector.lower() for k in calendar_keywords):
+                            logger.info(f"[Calendar Hook] Detected calendar trigger click: {selector}. Will wait for popup...")
+                            # Wait for a likely calendar popup (heuristic selector)
+                            popup_selectors = ['[role="dialog"]', '.calendar', '.datepicker', '[data-testid*="calendar"]', '[aria-label*="calendar"]']
+                            from ..tools.browser_tools import wait_for_selector
+                            found_popup = False
+                            for popup_selector in popup_selectors:
+                                logger.info(f"[Calendar Hook] Waiting for popup selector: {popup_selector}")
+                                result = await wait_for_selector(popup_selector, state="visible", timeout=4000)
+                                logger.info(f"[Calendar Hook] wait_for_selector result for {popup_selector}: {result}")
+                                if 'Waited' in result:
+                                    found_popup = True
+                                    break
+                            if not found_popup:
+                                logger.warning(f"[Calendar Hook] No calendar popup appeared after click on {selector}")
+                            else:
+                                # Refresh DOM after popup appears
+                                browser_page = PageManager.get_instance().get_current_page()
+                                dom_service = browser_page.get_dom_service() if browser_page else None
+                                if dom_service:
+                                    logger.info("[Calendar Hook] Refreshing interactive elements after calendar popup...")
+                                    await dom_service.get_interactive_elements(highlight=True)
+                                    logger.info("[Calendar Hook] DOM refreshed after calendar popup.")
+                except Exception as cal_exc:
+                    logger.error(f"[Calendar Hook] Error in calendar post-processing: {cal_exc}", exc_info=True)
                 return {
                     "messages": messages + [response],
                     "next": "tools"
