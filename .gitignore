@@ -223,3 +223,12 @@ cython_debug/
 **/playwright/packages/playwright-core/lib/utils/
 **/playwright/packages/playwright-core/lib/client/
 **/playwright/packages/playwright-core/lib/test/
+
+# Documentation and planning
+docs/
+plan.md
+stories.md
+references/
+src/talk2browser/services/__pycache__/
+.windsurf/
+__pycache__/

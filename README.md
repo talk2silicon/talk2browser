@@ -78,6 +78,16 @@ python -m talk2browser.scripts.generate_playwright_script recorded_actions.json 
 ```python
 import asyncio
 from dotenv import load_dotenv
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+Contributions are welcome! Please open issues or pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Support
+For questions or issues, please open an issue on [GitHub](https://github.com/youruser/talk2browser/issues).
+
 from talk2browser.agent import BrowserAgent
 
 async def main():
