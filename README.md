@@ -104,6 +104,76 @@ if __name__ == "__main__":
 3. **Tool Execution**: The selected tool is executed with the provided arguments
 4. **Response Generation**: The agent generates a response based on the tool's output
 
+### System Architecture
+
+```mermaid
+flowchart TB
+    %% Main Components
+    User[User] --> |"1. Natural Language Task"| CLI[CLI Interface]
+    CLI --> |"2. Task Definition"| Agent[LangGraph Agent]
+    
+    %% LLM Integration
+    Agent --> |"3. Register Tools"| LLM{LLM Backend}
+    LLM --> |"4. Tool Selection"| Agent
+    
+    %% Backend Options
+    LLM --> Claude[Anthropic Claude]
+    LLM --> Ollama[Ollama Local]
+    
+    %% Action Execution
+    Agent --> |"5. Execute Tools"| Browser[Web Browser]
+    Browser --> |"6. DOM Content"| DOMService[DOM Service]
+    DOMService --> Agent
+    
+    %% Vision Detection
+    Browser --> |"Screenshots"| Vision[Vision UI Detection]
+    Vision --> |"Element Detection"| DOMService
+    
+    %% Action Recording
+    Agent --> |"Record Actions"| ActionService[Action Service]
+    ActionService --> |"Store Actions"| ActionDB[(Action Storage)]
+    
+    %% Manual Mode
+    User --> |"Manual Actions"| ManualMode[Manual Mode]
+    ManualMode --> ActionService
+    
+    %% Script Generation
+    Agent --> |"7. Generate Scripts"| ScriptGen[Script Generator]
+    ActionDB --> ScriptGen
+    
+    %% Output Types
+    ScriptGen --> Selenium[Selenium Scripts]
+    ScriptGen --> Playwright[Playwright Scripts]
+    ScriptGen --> Cypress[Cypress Scripts]
+    ScriptGen --> PDFReport[PDF Reports]
+    
+    %% Error Handling
+    Browser --> |"Errors"| ErrorHandler[Error Handler]
+    ErrorHandler --> |"Fallback Strategies"| Agent
+    
+    %% Styling
+    classDef primary fill:#f9f,stroke:#333,stroke-width:2px
+    classDef secondary fill:#bbf,stroke:#333,stroke-width:1px
+    classDef tertiary fill:#dfd,stroke:#333,stroke-width:1px
+    classDef storage fill:#ffd,stroke:#333,stroke-width:1px
+    classDef output fill:#dff,stroke:#333,stroke-width:1px
+    
+    class User,CLI primary
+    class Agent,LLM,Browser,DOMService,ActionService secondary
+    class Vision,ManualMode,ScriptGen,ErrorHandler tertiary
+    class ActionDB storage
+    class Selenium,Playwright,Cypress,PDFReport output
+    class Claude,Ollama tertiary
+```
+
+### Core Workflow
+
+The simplified core workflow shows how natural language tasks are transformed into executable browser automation scripts:
+
+![Core Workflow](https://mermaid.ink/img/pako:eNqNkk1PwzAMhv9KlBOgSf0KbdMOcEJCQuKAuKBdXLfRSJOoSQek_XfspF1ZGQfmEsd-_cR2PBJtNJKCVHvbmVwb9OBsZzJ4NKbWGTzYxsLSqgZW1jUGDJpMwdLVDWgwYMG6vQFtK2_hxdUdGKtgZ3JnwFm9A-0M7Lc5fGhXwbN2FfhOeYCVtQa0KaDQBXTGFfBkXAk7nTtTwGNfwMqBLqHQpYeVLqH0BfQvYKVLqLyBjS4hGEjRQG0qqEwJW6PLvoBXXUJjKnhzNZRGw9ZWUOgSdkZDZWpI0ckPXMwuF7PpbDpfXMFkPp3NF_B9vVjOZovry-vJzfXkEqbXs_nkYjqZX8BkPr2cTSfTy8nF-Qgm4_F4dDYajaZnZyMYjUej0XjwM0JK9p0-Jt-xPmqzx0-yxCYl1Vof0JMqSYWx8zGpjPXYkEq8_yRVYI_qg1QJnpLK9w6rA6mCr0mVYE-qxFgkVWDfpEo-_gBRyOFH?type=png)
+
+> Note: The diagrams are rendered using Mermaid. If they don't display correctly in your markdown viewer, you can copy the Mermaid code and paste it into the [Mermaid Live Editor](https://mermaid.live/) to view and export as images.
+
 ---
 
 ## 📁 Project Structure

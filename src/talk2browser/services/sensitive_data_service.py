@@ -29,7 +29,7 @@ class SensitiveDataService:
         # Check runtime secrets
         for key, val in cls._instance._secrets.items():
             if isinstance(val, str) and val.strip() == norm_value:
-                logger.info(f"[SensitiveDataService] Found secret match for value '{value}' with key '{key}', returning placeholder '${{{key}}}'")
+                logger.debug(f"[SensitiveDataService] Found secret match for value '{value}' with key '{key}', returning placeholder '${{{key}}}'")
                 return f"${{{key}}}"
             else:
                 logger.debug(f"[SensitiveDataService] No match for value '{value}' with secret key '{key}': '{val}'")
@@ -39,7 +39,7 @@ class SensitiveDataService:
         for key in os.environ:
             env_val = os.environ[key]
             if isinstance(env_val, str) and env_val.strip() == norm_value:
-                logger.info(f"[SensitiveDataService] Found env match for value '{value}' with key '{key}', returning placeholder '${{{key}}}'")
+                logger.debug(f"[SensitiveDataService] Found env match for value '{value}' with key '{key}', returning placeholder '${{{key}}}'")
                 return f"${{{key}}}"
             else:
                 logger.debug(f"[SensitiveDataService] No match for value '{value}' with env key '{key}': '{env_val}'")

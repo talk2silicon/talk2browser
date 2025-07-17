@@ -13,14 +13,23 @@ import functools
 # --- Selector Normalization Utility ---
 def normalize_selector(selector: str, logger=None) -> str:
     """
-    Convert jQuery-style :contains("text") selectors to Playwright-compatible text selectors.
-    Examples:
-      - 'div:contains("Text")' -> 'div >> text="Text"'
-      - ':contains("Text")' -> 'text="Text"'
+    Normalize selectors for Playwright compatibility:
+    1. Convert jQuery-style :contains("text") selectors to Playwright text selectors
+       - 'div:contains("Text")' -> 'div >> text="Text"'
+       - ':contains("Text")' -> 'text="Text"'
+    2. Detect XPath selectors and prefix them with 'xpath='
+       - '/html/body/div[1]' -> 'xpath=/html/body/div[1]'
+       - 'html/body/div[1]' -> 'xpath=html/body/div[1]'
     """
     import re
     if not selector or not isinstance(selector, str):
         return selector
+        
+    # Already normalized with xpath= prefix
+    if selector.startswith('xpath='):
+        return selector
+        
+    # Case 1: jQuery :contains() selector
     pattern = r'^(?P<tag>\w+)?\s*:contains\(["\'](?P<text>.+)["\']\)$'
     match = re.match(pattern, selector.strip())
     if match:
@@ -28,8 +37,18 @@ def normalize_selector(selector: str, logger=None) -> str:
         text = match.group('text')
         new_selector = f'{tag} >> text="{text}"' if tag else f'text="{text}"'
         if logger:
-            logger.debug(f"Normalized selector: '{selector}' -> '{new_selector}'")
+            logger.debug(f"Normalized jQuery selector: '{selector}' -> '{new_selector}'")
         return new_selector
+    
+    # Case 2: XPath-like selector
+    # XPath patterns typically start with / or contain element/element patterns
+    xpath_pattern = r'^(/|html/|body/|//|\w+/\w+/)'
+    if re.match(xpath_pattern, selector.strip()) or selector.count('/') > 1:
+        new_selector = f'xpath={selector}'
+        if logger:
+            logger.debug(f"Detected XPath selector: '{selector}' -> '{new_selector}'")
+        return new_selector
+    
     return selector
 
 # --- Centralized Screenshot Utility for User Actions ---
@@ -268,11 +287,11 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
-        # Detect XPath and prefix as needed
+        # Use the enhanced normalize_selector function for consistent handling
         orig_selector = selector
-        if selector.startswith('/') or selector.startswith('html/'):
-            selector = f"xpath={selector}"
-            logger.debug(f"Selector '{orig_selector}' looks like XPath, transformed to '{selector}' for Playwright locator.")
+        selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
         else:
             logger.debug(f"Selector '{selector}' used as-is for Playwright locator.")
         logger.info(f"Attempting to click {selector} (timeout={timeout}) on BrowserPage (url: {getattr(page, 'url', None)})")
@@ -368,13 +387,15 @@ async def fill(selector: str, text: str, **kwargs) -> str:
     page = browser_page.get_page()
     try:
         logger.info(f"Attempting to fill field {selector} with text: {text} on BrowserPage (url: {getattr(page, 'url', None)})")
-        # If selector looks like an XPath, prefix with 'xpath=' for Playwright
-        if selector.startswith('/') or selector.startswith('html/'):
-            xpath = selector
-            locator = page.locator(f'xpath={selector}')
-        else:
-            xpath = None
-            locator = page.locator(selector)
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
+        selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
+        
+        # Store original xpath for reference if needed
+        xpath = orig_selector if selector.startswith('xpath=') else None
+        locator = page.locator(selector)
         try:
             await locator.fill(text)
             logger.info(f"Filled field {selector} with text: {text} on BrowserPage (url: {page.url})")
@@ -463,6 +484,11 @@ async def type(selector: str, text: str, **kwargs) -> str:
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
+        selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
         locator = page.locator(selector)
         await locator.type(text)
         logger.info(f"Typed '{text}' into {selector}")
@@ -521,6 +547,11 @@ async def check(selector: str, **kwargs) -> str:
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
+        selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
         locator = page.locator(selector)
         await locator.check()
         logger.info(f"Checked {selector}")
@@ -552,6 +583,11 @@ async def uncheck(selector: str, **kwargs) -> str:
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
+        selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
         locator = page.locator(selector)
         await locator.uncheck()
         logger.info(f"Unchecked {selector}")
@@ -583,6 +619,11 @@ async def select_option(selector: str, value: str, **kwargs) -> str:
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
+        selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
         locator = page.locator(selector)
         await locator.select_option(value)
         logger.info(f"Selected option '{value}' in {selector}")
@@ -614,8 +655,12 @@ async def hover(selector: str, **kwargs) -> str:
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
-        locator = page.locator(selector)
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
         selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
+        locator = page.locator(selector)
         await locator.hover()
         logger.info(f"Hovered over {selector}")
         from ..services.action_service import ActionService
@@ -645,8 +690,12 @@ async def wait_for_selector(selector: str, state: str = "visible", timeout: int 
         return f"Error: No active browser page."
     page = browser_page.get_page()
     try:
-        locator = page.locator(selector)
+        # Use the enhanced normalize_selector function for consistent handling
+        orig_selector = selector
         selector = normalize_selector(selector, logger)
+        if selector != orig_selector:
+            logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
+        locator = page.locator(selector)
         await locator.wait_for(state=state, timeout=timeout)
         logger.info(f"Waited for {selector} to be {state}")
         from ..services.action_service import ActionService
@@ -729,7 +778,26 @@ async def list_suggestions(container_selector: str, option_selector: str = None,
 
     try:
         option_selector = option_selector or "> *"
-        locator = page.locator(f"{container_selector} {option_selector}")
+        
+        # Normalize selectors before using them with Playwright
+        container_selector = normalize_selector(container_selector, logger)
+        option_selector = normalize_selector(option_selector, logger)
+        
+        # Handle XPath selectors specially - can't combine XPath selectors with spaces
+        if container_selector.startswith('xpath=') or option_selector.startswith('xpath='):
+            # If both are XPath, we can only use one (container takes precedence)
+            if container_selector.startswith('xpath=') and option_selector.startswith('xpath='):
+                logger.warning("Cannot combine two XPath selectors, using container_selector only")
+                locator = page.locator(container_selector)
+            elif container_selector.startswith('xpath='):
+                logger.warning("Using XPath container_selector only, ignoring option_selector")
+                locator = page.locator(container_selector)
+            else:
+                logger.warning("Using XPath option_selector only, ignoring container_selector")
+                locator = page.locator(option_selector)
+        else:
+            # Both are CSS selectors, can combine with space
+            locator = page.locator(f"{container_selector} {option_selector}")
         count = await locator.count()
         logger.info(f"[list_suggestions] Found {count} options in {container_selector}")
         suggestions = []

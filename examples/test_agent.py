@@ -51,6 +51,7 @@ TASKS = {
         "- Number of forks "
         "- URL to the repository "
         "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
+        "Finally generate a Playwright python script that automates this entire process."
     ),
     "tiktok_trending": (
         "Go to https://www.tiktok.com/channel/trending-now?lang=en. "
@@ -72,6 +73,7 @@ TASKS = {
         "- Delivery options (if available) "
         "Create a comprehensive PDF report with all the extracted information, "
         "formatted in a clean and readable way with proper headings and sections."
+        "Finally generate a Playwright python script that automates this entire process."
     )
 }
 

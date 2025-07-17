@@ -14,7 +14,7 @@ class ActionService:
     _instance = None
 
     def record_agent_action(self, action: dict) -> None:
-        logger.info(f"[ActionService] Recording agent action: {action}")
+        logger.debug(f"[ActionService] Recording agent action: {action}")
         action_type = action.get('type', '')
         args = action.get('args', {})
         element_actions = {'click', 'fill', 'type', 'check', 'uncheck', 'select_option', 'hover'}
@@ -41,7 +41,7 @@ class ActionService:
                                     break
                     # Only use hash for merging, do NOT add to action JSON
                     if hash_val:
-                        logger.info(f"[ActionService] Resolved hash for action: {action_type} -> {hash_val}")
+                        logger.debug(f"[ActionService] Resolved hash for action: {action_type} -> {hash_val}")
                     else:
                         logger.warning(f"[ActionService] Could not resolve hash for action: {action_type} (selector={selector}, xpath={xpath})")
                 except Exception as e:
@@ -58,7 +58,7 @@ class ActionService:
                     if hasattr(SensitiveDataService, 'get_placeholder_for_value'):
                         placeholder = SensitiveDataService.get_placeholder_for_value(real_value)
                     if placeholder:
-                        logger.info(f"[ActionService] Masking sensitive value for {action_type}: {key}={real_value} -> {placeholder}")
+                        logger.debug(f"[ActionService] Masking sensitive value for {action_type}: {key}={real_value} -> {placeholder}")
                         args[key] = placeholder
         # Remove hash from args before saving JSON
         if 'hash' in args:
@@ -66,7 +66,7 @@ class ActionService:
             args.pop('hash')
         action['args'] = args
         self.agent_actions.append(action)
-        logger.info(f"[ActionService] Agent actions now has {len(self.agent_actions)} actions: {self.agent_actions}")
+        logger.debug(f"[ActionService] Agent actions now has {len(self.agent_actions)} actions: {self.agent_actions}")
         self._perform_realtime_merge()
 
     def __init__(self, dom_service=None):
@@ -227,12 +227,12 @@ class ActionService:
 
     def record_manual_action(self, action: dict) -> None:
         import traceback
-        logger.info(f"[ActionService] Recording manual action: {action}")
+        logger.debug(f"[ActionService] Recording manual action: {action}")
         logger.debug(f"[ActionService] Manual action callstack:\n{traceback.format_stack()}")
         if not self.is_manual_mode:
             logger.warning("[ActionService] Manual action recorded while NOT in manual mode! This may indicate a bug.")
         self.manual_actions.append(action)
-        logger.info(f"[ActionService] Manual actions now has {len(self.manual_actions)} actions: {self.manual_actions}")
+        logger.debug(f"[ActionService] Manual actions now has {len(self.manual_actions)} actions: {self.manual_actions}")
         self._perform_realtime_merge()
 
     def record_manual_actions(self, actions: List[Dict[str, Any]]) -> None:
@@ -241,7 +241,7 @@ class ActionService:
         self._perform_realtime_merge()
 
     def record_manual_actions_list(self, actions: List[Dict[str, Any]]):
-        logger.info(f"Recording {len(actions)} manual actions.")
+        logger.debug(f"Recording {len(actions)} manual actions.")
         self.manual_actions = actions
         self._perform_realtime_merge()
 
@@ -250,10 +250,10 @@ class ActionService:
 
     def pop_new_manual_actions(self) -> List[Dict[str, Any]]:
         """Return and clear all currently recorded manual actions (for one-time injection into agent state)."""
-        logger.info(f"[ActionService] Popping {len(self.manual_actions)} new manual actions for agent context injection.")
+        logger.debug(f"[ActionService] Popping {len(self.manual_actions)} new manual actions for agent context injection.")
         actions = self.manual_actions.copy()
         self.manual_actions.clear()
-        logger.info("[ActionService] Cleared manual_actions after pop.")
+        logger.debug("[ActionService] Cleared manual_actions after pop.")
         self._perform_realtime_merge()
         return actions
 
@@ -269,13 +269,13 @@ class ActionService:
     # REMOVED: merge_and_store_actions (merging is now real-time and internal)
 
     def clear(self):
-        logger.info("Clearing all recorded actions.")
+        logger.debug("Clearing all recorded actions.")
         self.manual_actions = []
         self.agent_actions = []
         self._actions = []
 
     def save_action_lists(self, path: str):
-        logger.info(f"Saving all action lists to {path} via save_json_to_file")
+        logger.debug(f"Saving all action lists to {path} via save_json_to_file")
         from ..tools.file_system_tools import save_json_to_file
         save_json_to_file(path, {
             "manual_actions": self.manual_actions,
@@ -298,12 +298,12 @@ class ActionService:
         path = os.path.join(output_dir, filename)
         from ..tools.file_system_tools import save_json_to_file
         save_json_to_file(path, self._actions)
-        logger.info(f"[ActionService] Merged actions saved to {path}")
+        logger.debug(f"[ActionService] Merged actions saved to {path}")
         return path
 
 
     def load_action_lists(self, path: str):
-        logger.info(f"Loading action lists from {path}")
+        logger.debug(f"Loading action lists from {path}")
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         self.manual_actions = data.get("manual_actions", [])
@@ -312,4 +312,3 @@ class ActionService:
         return data
 
     # REMOVED: load_merged_actions (use load_action_lists and access .actions property)
-

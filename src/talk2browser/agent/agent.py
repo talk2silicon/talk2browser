@@ -6,7 +6,9 @@ and execute browser automation tasks using Playwright.
 """
 import os
 import logging
+import io
 from typing import Annotated, Sequence, TypedDict, Optional
+from PIL import Image  # For image compression
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_anthropic import ChatAnthropic
@@ -61,7 +63,7 @@ TOOLS = [
     save_json  # <-- Added save_json tool for LLM
 ]
 logger.debug(f"[Agent] TOOLS after registration: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
-logger.info(f"[Agent] TOOLS registered: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
+#logger.info(f"[Agent] TOOLS registered: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
 def _tool_display_name(tool):
     return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
 def log_registered_tools():
@@ -70,10 +72,10 @@ def log_registered_tools():
         name = _tool_display_name(tool)
         doc = getattr(tool, '__doc__', '')
         tool_info.append(f"- {name}: {doc.strip().splitlines()[0] if doc else 'No docstring'}")
-    logger.info("Registered tools (detailed):\n" + "\n".join(tool_info))
+    #logger.info("Registered tools (detailed):\n" + "\n".join(tool_info))
 
 log_registered_tools()
-logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
+#logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
 
 # System prompt template
 SYSTEM_PROMPT = """
@@ -89,6 +91,28 @@ You are a helpful AI assistant that can control a web browser to complete multi-
 - Add debug logging after calling `list_suggestions` and after selection to record visible options and the selected value/hash.
 - If no result appears, retry or suggest alternatives, and log all visible suggestions for debugging.
 - If the target element for fill is not an <input>, <textarea>, <select>, or [contenteditable], do NOT use fill. Instead, click the element to open any associated widget (calendar, dropdown, etc.), then use list_suggestions or click/select the appropriate option. Log your reasoning and actions.
+
+## Selector Format Requirements:
+- All tools that accept selectors (navigate, click, fill, get_count, list_suggestions, etc.) REQUIRE CSS selectors, NOT XPath.
+- CSS selectors use classes (.classname), IDs (#idname), and tag names (div, span) with combinators (>, +, ~).
+- XPath selectors (like "html/body/div[1]/div[2]") will cause errors and should NOT be used.
+- Valid CSS selector examples:
+  - "#login-button" (element with ID "login-button")
+  - ".product-item" (elements with class "product-item")
+  - "article.trending-repo" (article elements with class "trending-repo")
+  - "div > span" (span elements that are direct children of div elements)
+  - "table tr:nth-child(2)" (second row in a table)
+- If you need to target elements by their text content, use attribute selectors like: "button[text='Submit']" or "[aria-label='Search']"
+- When using list_suggestions, provide a container selector (like "div.dropdown-menu") and optionally an item selector (like "li.option")
+
+## Selector Format Guidelines:
+- Use CSS selectors by default (e.g., "div.class", "#id", "[attribute=value]").
+- For XPath selectors, always prefix with "xpath=" (e.g., "xpath=//div[@class='example']").
+- Do not use raw XPath expressions without the "xpath=" prefix as this will cause parsing errors.
+- When selecting by text content:
+  - Prefer Playwright's text selector syntax: "text=Example Text" or "div >> text=Example"
+  - Avoid jQuery-style ":contains()" syntax as it requires normalization
+- For complex selections, consider using multiple simpler selectors in sequence rather than one complex selector.
 
 ## Script Generation Tool Usage:
 - If the user requests a browser automation script (such as Playwright, Cypress, or Selenium), you MUST call the `generate_script` tool after completing all required browser actions.
@@ -126,6 +150,7 @@ You are a helpful AI assistant that can control a web browser to complete multi-
     - code: The code string to inject into the editor
 - Only use fill for standard <input>, <textarea>, or contenteditable fields.
 - If you encounter an element that looks like a code editor (e.g., a <div> with code-like content or editor-specific classes) but is not an input/textarea/contenteditable, always try set_code_in_editor first, even if you are unsure of the editor type.
+- If fill fails on a non-input element that appears to be a code editor, retry using set_code_in_editor.
 
 Example:
 - If asked to enter code into <input id="code-box">, use fill.
@@ -214,7 +239,7 @@ class BrowserAgent:
             SensitiveDataService.configure({})
         
         self.graph = self._create_agent_graph()
-        logger.info("BrowserAgent initialized with %s", self.llm.__class__.__name__)
+        #logger.info("BrowserAgent initialized with %s", self.llm.__class__.__name__)
         logger.debug(f"Sensitive data keys: {list(self.sensitive_data.keys()) if self.sensitive_data else []}")
     
     async def __aenter__(self):
@@ -229,7 +254,7 @@ class BrowserAgent:
             await self.client.page.wait_for_load_state("networkidle")
 
             # Create BrowserPage abstraction and add to PageManager
-            logger.info("Creating initial BrowserPage and DOMService...")
+            #logger.info("Creating initial BrowserPage and DOMService...")
             browser_page = BrowserPage(self.client.page)
             self.dom_service = browser_page.dom_service
             # Set DOMService reference for ActionService real-time merging
@@ -237,15 +262,15 @@ class BrowserAgent:
             # Expose mode change handler to Playwright (handled by ActionService)
             await ActionService.get_instance().expose_mode_change_handler(self.client.page)
             self.page_manager.add_page("main", browser_page)
-            logger.info("Initial BrowserPage added to PageManager as 'main'")
+            #logger.info("Initial BrowserPage added to PageManager as 'main'")
 
             # Initial scan for interactive elements
-            logger.info("Performing initial element scan on main BrowserPage...")
+            #logger.info("Performing initial element scan on main BrowserPage...")
             await browser_page.dom_service.get_interactive_elements(highlight=True)
             elements_str, element_map = browser_page.dom_service.format_elements()
-            logger.info(f"Initial scan: {len(element_map)} elements mapped on 'main' page.")
+            #logger.info(f"Initial scan: {len(element_map)} elements mapped on 'main' page.")
 
-            logger.info("Browser, BrowserPage, and DOM service initialized successfully")
+            #logger.info("Browser, BrowserPage, and DOM service initialized successfully")
             return self
         except Exception as e:
             logger.error("Failed to initialize browser: %s", str(e), exc_info=True)
@@ -257,13 +282,13 @@ class BrowserAgent:
         if hasattr(self, 'client') and self.client:
             try:
                 await self.client.close()
-                logger.info("Browser client closed successfully")
+                logger.debug("Browser client closed successfully")
             except Exception as e:
                 logger.warning("Error closing browser client: %s", str(e))
     
     def _create_agent_graph(self):
         """Create the two-node LangGraph for the agent, using the standard ToolNode."""
-        logger.info("Creating agent graph with standard ToolNode (no custom tool dispatch)")
+        logger.debug("Creating agent graph with standard ToolNode (no custom tool dispatch)")
         workflow = StateGraph(AgentState)
         workflow.add_node("agent", self._chatbot)
         workflow.add_node("tools", ToolNode(TOOLS))
@@ -302,9 +327,9 @@ class BrowserAgent:
         
         # Check if the last message has tool calls
         if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
-            logger.info(f"[Agent] _route_tools: tool_calls present in last message: {ai_message.tool_calls}")
+            logger.debug(f"[Agent] _route_tools: tool_calls present in last message: {ai_message.tool_calls}")
             return "tools"
-        logger.info("[Agent] _route_tools: No tool calls in last message, ending conversation")
+        logger.debug("[Agent] _route_tools: No tool calls in last message, ending conversation")
         return END
 
     # --- PageManager integration methods ---
@@ -312,20 +337,20 @@ class BrowserAgent:
         """Create and add a new BrowserPage to the PageManager."""
         browser_page = BrowserPage(playwright_page)
         self.page_manager.add_page(page_id, browser_page)
-        logger.info(f"Created and added new BrowserPage with id {page_id}")
+        logger.debug(f"Created and added new BrowserPage with id {page_id}")
 
     def switch_page(self, page_id: str):
         """Switch to a different BrowserPage by id."""
         page = self.page_manager.switch_to(page_id)
         if page:
-            logger.info(f"Switched to BrowserPage with id {page_id}")
+            logger.debug(f"Switched to BrowserPage with id {page_id}")
         else:
             logger.error(f"Failed to switch to BrowserPage with id {page_id}")
 
     def close_page(self, page_id: str):
         """Close and remove a BrowserPage by id."""
         self.page_manager.close_page(page_id)
-        logger.info(f"Closed BrowserPage with id {page_id}")
+        logger.debug(f"Closed BrowserPage with id {page_id}")
     # --- End PageManager integration ---
 
     
@@ -356,7 +381,7 @@ class BrowserAgent:
 
         try:
             # Get page state
-            logger.info("Getting current page state")
+            logger.debug("Getting current page state")
             page_state = await self.client.get_page_state()
             current_url = page_state.get('url', 'No page loaded')
             current_title = page_state.get('title', '')
@@ -373,12 +398,12 @@ class BrowserAgent:
             if dom_service:
                 try:
                     # Refresh interactive elements
-                    logger.info("Refreshing interactive elements...")
+                    logger.debug("Refreshing interactive elements...")
                     await dom_service.get_interactive_elements(highlight=True)
 
                     # Get formatted elements and map
                     elements_context, element_map = dom_service.format_elements()
-                    logger.info(f"Retrieved {len(element_map)} interactive elements")
+                    logger.debug(f"Retrieved {len(element_map)} interactive elements")
 
                     # Overwrite element map in state for tools (removes any previous map)
                     state["element_map"] = element_map  # Always latest
@@ -446,12 +471,66 @@ class BrowserAgent:
                     logger.debug(f"[Agent] Screenshots found for LLM input: {screenshots}")
                     for path in screenshots:
                         try:
-                            with open(path, "rb") as imgf:
-                                img_b64 = base64.b64encode(imgf.read()).decode("utf-8")
+                            # Add image compression to ensure size is under Claude's 5MB limit
+                            with Image.open(path) as img:
+                                # Start with quality 80 (good balance of quality and size)
+                                quality = 80
+                                max_size = 4.5 * 1024 * 1024  # 4.5MB to be safe (buffer below 5MB)
+                                
+                                # First try: compress with initial quality
+                                compressed_img = io.BytesIO()
+                                img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
+                                
+                                # Check if size is still too large
+                                while compressed_img.tell() > max_size and quality > 15:
+                                    # Reduce quality and try again
+                                    quality -= 10
+                                    logger.debug(f"[Agent] Reducing image quality to {quality} to meet size limit")
+                                    compressed_img = io.BytesIO()
+                                    img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
+                                
+                                # If still too large, resize the image
+                                if compressed_img.tell() > max_size:
+                                    # Calculate new dimensions to reduce by 25% each time
+                                    width, height = img.size
+                                    resize_factor = 0.75
+                                    
+                                    while compressed_img.tell() > max_size and resize_factor > 0.3:
+                                        new_width = int(width * resize_factor)
+                                        new_height = int(height * resize_factor)
+                                        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+                                        
+                                        # Try with the resized image
+                                        compressed_img = io.BytesIO()
+                                        resized_img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
+                                        
+                                        # If still too large, reduce size further
+                                        if compressed_img.tell() > max_size:
+                                            resize_factor -= 0.15
+                                        else:
+                                            break
+                                    
+                                    logger.debug(f"[Agent] Resized image to {resize_factor:.2f}x original size to meet size limit")
+                                
+                                # Get the compressed image bytes
+                                compressed_img.seek(0)
+                                img_bytes = compressed_img.read()
+                                
+                                # Final size check - if still too large, use extreme measures
+                                if len(img_bytes) > max_size:
+                                    logger.warning(f"[Agent] Image still too large ({len(img_bytes)/1024/1024:.2f}MB), using grayscale conversion")
+                                    gray_img = img.convert('L')  # Convert to grayscale
+                                    compressed_img = io.BytesIO()
+                                    gray_img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
+                                    compressed_img.seek(0)
+                                    img_bytes = compressed_img.read()
+                                
+                                # Encode to base64
+                                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
                                 screenshot_blobs.append(img_b64)
-                                logger.info(f"[Agent] Added screenshot {path} to LLM vision input (base64, {len(img_b64)} bytes)")
+                                logger.info(f"[Agent] Added compressed screenshot {path} to LLM vision input (base64, {len(img_b64)} bytes, quality={quality})")
                         except Exception as e:
-                            logger.error(f"[Agent] Failed to encode screenshot {path} for LLM: {e}")
+                            logger.error(f"[Agent] Failed to encode/compress screenshot {path} for LLM: {e}")
                 if is_vision_enabled():
                     vision_results = VisionService.get_instance().get_latest_results()
                     vision_image = VisionService.get_instance().get_latest_image_path()
@@ -482,9 +561,9 @@ class BrowserAgent:
                 messages.insert(0, SystemMessage(content=system_content))
 
             # --- LLM Debug Logging ---
-            logger.info(f"[Agent] Registered tools: {[t.name if hasattr(t, 'name') else t.__name__ for t in TOOLS]}")
-            logger.info(f"[Agent] LLM input messages (system+user):\n{[getattr(m, 'content', str(m)) for m in messages]}")
-            logger.info(f"[Agent] System prompt (truncated to 500 chars): {system_content[:500]}")
+            logger.debug(f"[Agent] Registered tools: {[t.name if hasattr(t, 'name') else t.__name__ for t in TOOLS]}")
+            logger.debug(f"[Agent] LLM input messages (system+user):\n{[getattr(m, 'content', str(m)) for m in messages]}")
+            logger.debug(f"[Agent] System prompt (truncated to 500 chars): {system_content[:500]}")
             # Prepare LLM with tools
             llm_with_tools = self.llm.bind_tools(TOOLS)
             # Attach screenshots as image blocks in HumanMessage if feature flag is enabled
@@ -508,7 +587,7 @@ class BrowserAgent:
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
-                                    "media_type": "image/png",
+                                    "media_type": "image/jpeg",
                                     "data": blob
                                 }
                             })
@@ -516,9 +595,9 @@ class BrowserAgent:
                             logger.error(f"[Agent] Skipping invalid screenshot blob: {blob}")
                     logger.debug(f"[Agent] LLM HumanMessage content blocks: {content_blocks}")
                     messages[i] = HumanMessage(content=content_blocks)
-                response = await llm_with_tools.ainvoke(messages)
-            else:
-                response = await llm_with_tools.ainvoke(messages)
+            
+            # Invoke LLM with tools
+            response = await llm_with_tools.ainvoke(messages)
             logger.debug(f"[Agent] LLM response: {response}")
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 logger.info(f"[Agent] LLM tool calls: {response.tool_calls}")
@@ -542,15 +621,15 @@ class BrowserAgent:
                         # Heuristic: look for calendar triggers by selector or label
                         calendar_keywords = ['calendar', 'date', 'check in', 'check out', 'add dates']
                         if any(k in selector.lower() for k in calendar_keywords):
-                            logger.info(f"[Calendar Hook] Detected calendar trigger click: {selector}. Will wait for popup...")
+                            #logger.info(f"[Calendar Hook] Detected calendar trigger click: {selector}. Will wait for popup...")
                             # Wait for a likely calendar popup (heuristic selector)
                             popup_selectors = ['[role="dialog"]', '.calendar', '.datepicker', '[data-testid*="calendar"]', '[aria-label*="calendar"]']
                             from ..tools.browser_tools import wait_for_selector
                             found_popup = False
                             for popup_selector in popup_selectors:
-                                logger.info(f"[Calendar Hook] Waiting for popup selector: {popup_selector}")
+                                #logger.info(f"[Calendar Hook] Waiting for popup selector: {popup_selector}")
                                 result = await wait_for_selector(popup_selector, state="visible", timeout=4000)
-                                logger.info(f"[Calendar Hook] wait_for_selector result for {popup_selector}: {result}")
+                                #logger.info(f"[Calendar Hook] wait_for_selector result for {popup_selector}: {result}")
                                 if 'Waited' in result:
                                     found_popup = True
                                     break
@@ -561,9 +640,9 @@ class BrowserAgent:
                                 browser_page = PageManager.get_instance().get_current_page()
                                 dom_service = browser_page.get_dom_service() if browser_page else None
                                 if dom_service:
-                                    logger.info("[Calendar Hook] Refreshing interactive elements after calendar popup...")
+                                    #logger.info("[Calendar Hook] Refreshing interactive elements after calendar popup...")
                                     await dom_service.get_interactive_elements(highlight=True)
-                                    logger.info("[Calendar Hook] DOM refreshed after calendar popup.")
+                                    #logger.info("[Calendar Hook] DOM refreshed after calendar popup.")
                 except Exception as cal_exc:
                     logger.error(f"[Calendar Hook] Error in calendar post-processing: {cal_exc}", exc_info=True)
                 return {
@@ -622,7 +701,7 @@ class BrowserAgent:
             # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
                 path = ActionService.get_instance().save_merged_actions_with_prompt(task)
-                logger.info(f"Merged actions saved to {path} via ActionService.save_merged_actions_with_prompt")
+                #logger.info(f"Merged actions saved to {path} via ActionService.save_merged_actions_with_prompt")
             except Exception as final_exc:
                 logger.error(f"Failed to save merged actions: {final_exc}")
             # --- End final block ---
