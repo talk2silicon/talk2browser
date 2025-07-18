@@ -73,6 +73,19 @@ TASKS = {
         "- Delivery options (if available) "
         "Create a comprehensive PDF report with all the extracted information, "
         "formatted in a clean and readable way with proper headings and sections."
+    ),
+    "gumtree_dogs": (
+        "Go to https://www.gumtree.com.au/. "
+        "Search for 'cocker spaniel' dogs in the Canberra ACT region. "
+        "Sort the results by most recent. "
+        "Extract information about the top 10 listings including: "
+        "- Title of the listing "
+        "- Price "
+        "- Location "
+        "- Date posted "
+        "- Description (if available) "
+        "- Seller information (if available) "
+        "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
         "Finally generate a Playwright python script that automates this entire process."
     )
 }
