@@ -1,7 +1,10 @@
 # Talk2Browser
 
-[![Watch the demo](assets/talk2browser.png)](assets/talk2browser.mp4)
-> Click the image to watch the demo video (MP4, opens in browser).
+[![Watch the demo on YouTube](assets/talk2browser.png)](https://youtu.be/mOcW7bFahdk)
+> Click the image to watch the full demo video on YouTube.
+
+![Demo GIF](assets/talk2browser.gif)
+> Quick look: 5-second GIF demo generated from the video.
 
 A self-improving browser automation system powered by LLMs, Playwright, and modular agent services. Generate, record, and replay test scripts using natural language and advanced automation tools.
 
