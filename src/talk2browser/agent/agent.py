@@ -28,7 +28,7 @@ from ..browser.dom.service import DOMService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
-    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html,
+    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html, get_screenshot,
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
     set_code_in_editor, save_json
 )
@@ -54,6 +54,7 @@ TOOLS = [
     is_enabled,
     list_suggestions,
     generate_pdf_from_html,
+    get_screenshot,
     generate_script,
     generate_negative_tests,
     replay_action_json_with_playwright,

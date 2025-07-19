@@ -59,7 +59,7 @@ TASKS = {
         "find the video with most views and click on it. "
         "Wait for the video to load. "
         "Find the like count and print it. "
-        "Generate a Playwright python script that automates this entire process."
+        "Include a screenshot of every step as additional pages at the end of the PDF report."
     ),
     "amazon_bose": (
         "Go to https://www.amazon.com.au. "

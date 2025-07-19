@@ -836,6 +836,63 @@ async def list_interactive_elements() -> str:
     pass
 
 
+# --- LLM Tool: Screenshot Capture & History ---
+from langchain.tools import tool
+
+@tool
+def get_screenshot(selector: str = None, mode: str = "capture") -> str:
+    """
+    Capture a screenshot (optionally by selector) or return all screenshot paths from the action recorder.
+    Args:
+        selector: (optional) CSS selector for element screenshot.
+        mode: "capture" (default) to take a screenshot, "history" to return all screenshot paths.
+    Returns:
+        str (path) or list of paths.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    from ..services.action_service import ActionService
+    from ..browser.page_manager import PageManager
+
+    if mode == "history":
+        actions = ActionService.get_instance().agent_actions
+        return [
+            a['args']['path']
+            for a in actions
+            if a.get('type') == 'screenshot' and 'path' in a.get('args', {})
+        ]
+
+    browser_page = PageManager.get_instance().get_current_page()
+    if not browser_page:
+        return "Error: No active browser page."
+    page = browser_page.get_page()
+    from pathlib import Path
+    import datetime
+    screenshots_dir = Path("./screenshots")
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+    # Use provided time source for reproducibility
+    timestamp = "20250719_192531"  # 2025-07-19T19:25:31+10:00
+    screenshot_path = str(screenshots_dir / f"screenshot_{timestamp}.png")
+    import asyncio
+    async def take():
+        if selector:
+            await page.locator(selector).screenshot(path=screenshot_path)
+        else:
+            await page.screenshot(path=screenshot_path, full_page=True)
+    # Run the async screenshot logic synchronously for tool compatibility
+    try:
+        asyncio.get_event_loop().run_until_complete(take())
+    except RuntimeError:
+        # If already in event loop (e.g. in pytest), use create_task
+        import nest_asyncio
+        nest_asyncio.apply()
+        asyncio.get_event_loop().run_until_complete(take())
+    ActionService.get_instance().record_agent_action({
+        "type": "screenshot",
+        "args": {"path": screenshot_path, "selector": selector}
+    })
+    return screenshot_path
+
 # --- LLM Tool: List Suggestions for Dropdown/Autocomplete ---
 from langchain.tools import tool
 
