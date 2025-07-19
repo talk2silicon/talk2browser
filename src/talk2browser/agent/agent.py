@@ -701,7 +701,16 @@ class BrowserAgent:
             # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
                 path = ActionService.get_instance().save_merged_actions_with_prompt(task)
-                #logger.info(f"Merged actions saved to {path} via ActionService.save_merged_actions_with_prompt")
+                # --- PDF screenshot extraction and generation ---
+                # Extract screenshot paths from actions
+                actions = ActionService.get_instance().actions
+                screenshot_paths = [
+                    a["args"].get("path") for a in actions
+                    if a.get("type") == "screenshot" and "path" in a.get("args", {})
+                ]
+                # If a PDF report is to be generated, pass screenshots to the PDF tool (pseudo, adapt as needed):
+                # generate_pdf_from_html(html_content, path=pdf_path, screens=screenshot_paths)
+                # (Integrate this call where your PDF generation is triggered)
             except Exception as final_exc:
                 logger.error(f"Failed to save merged actions: {final_exc}")
             # --- End final block ---

@@ -72,7 +72,8 @@ TASKS = {
         "- Rating (if available) "
         "- Delivery options (if available) "
         "Create a comprehensive PDF report with all the extracted information, "
-        "formatted in a clean and readable way with proper headings and sections."
+        "formatted in a clean and readable way with proper headings and sections. "
+        "Include a screenshot of every step as additional pages at the end of the PDF report."
     )
 }
 

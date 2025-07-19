@@ -22,10 +22,11 @@ A self-improving browser automation system powered by LLMs, Playwright, and modu
 ## 🛠️ Installation
 
 1. **Python 3.10+ required.**
-2. **Install Playwright browsers:**
+2. **Install Playwright browsers (optional, only if you want browser automation or script generation):**
    ```bash
    playwright install
    ```
+   > **Note:** Playwright is only required if you want to use browser automation or script generation features. If you only want to use the agent for non-browser tasks, you do not need to install Playwright or its browsers.
 3. **Install the package in development mode:**
    ```bash
    pip install -e .[dev]

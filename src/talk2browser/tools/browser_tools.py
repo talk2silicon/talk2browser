@@ -157,8 +157,14 @@ async def is_enabled(selector: str, **kwargs) -> bool:
     Returns:
         bool: True if enabled, False if disabled or not found
     """
-    import logging
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
     logger = logging.getLogger(__name__)
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting is_enabled.")
+        return False
     logger.info(f"TOOL CALL: is_enabled(selector={selector}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -188,8 +194,27 @@ async def is_enabled(selector: str, **kwargs) -> bool:
         return enabled
     except Exception as e:
         logger.error(f"Failed to check enabled for {selector}: {e}")
-        
         return False
+
+@tool
+@resolve_hash_args
+async def resolve_selector(selector, dom_service, logger):
+    """
+    Resolves a hash selector to an XPath selector using DOMService if needed.
+    Returns a valid Playwright selector (xpath=...), or the original if not a hash.
+    """
+    if selector and isinstance(selector, str) and selector.startswith('#') and dom_service:
+        xpath = dom_service.hash_to_xpath(selector)
+        if xpath:
+            resolved = f"xpath={xpath}"
+            if logger:
+                logger.info(f"Resolved hash {selector} to selector: {resolved}")
+            return resolved
+        else:
+            if logger:
+                logger.error(f"Could not resolve hash selector: {selector}")
+            return None
+    return selector
 
 @tool
 @resolve_hash_args
@@ -224,11 +249,9 @@ async def get_count(selector: str, **kwargs) -> int:
         ActionService.get_instance().record_agent_action(action_data)
         logger.debug(f"[browser_tools] Agent actions after get_count: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after get_count: {ActionService.get_instance().actions}")
-        
         return count
     except Exception as e:
         logger.error(f"Failed to get count for {selector}: {e}")
-        
         return 0
 
 @tool
@@ -279,6 +302,13 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
     """
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting click.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: click(selector={selector}, timeout={timeout}, element_map={element_map})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -374,6 +404,13 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         str: Confirmation message or error details
     """
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting fill.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: fill(selector={selector}, text={text}, kwargs={kwargs})")
     # Assert that text is not a secret placeholder
     if isinstance(text, str) and text.startswith("${") and text.endswith("}"):
@@ -392,7 +429,6 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         selector = normalize_selector(selector, logger)
         if selector != orig_selector:
             logger.debug(f"Selector normalized: '{orig_selector}' -> '{selector}'")
-        
         # Store original xpath for reference if needed
         xpath = orig_selector if selector.startswith('xpath=') else None
         locator = page.locator(selector)
@@ -476,6 +512,13 @@ async def fill(selector: str, text: str, **kwargs) -> str:
 async def type(selector: str, text: str, **kwargs) -> str:
     """Type text into an element, simulating key events (unlike fill)."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting type.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: type(selector={selector}, text={text}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -533,12 +576,18 @@ async def type(selector: str, text: str, **kwargs) -> str:
         await capture_screenshot_for_action(page, "type", logger, success=False)
         return f"Error: Failed to type into {selector}: {e}"
 
-
 @tool
 @resolve_hash_args
 async def check(selector: str, **kwargs) -> str:
     """Check a checkbox or radio button."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting check.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: check(selector={selector}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -575,6 +624,13 @@ async def check(selector: str, **kwargs) -> str:
 async def uncheck(selector: str, **kwargs) -> str:
     """Uncheck a checkbox."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting uncheck.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: uncheck(selector={selector}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -611,6 +667,13 @@ async def uncheck(selector: str, **kwargs) -> str:
 async def select_option(selector: str, value: str, **kwargs) -> str:
     """Select an option in a <select> element."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting select_option.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: select_option(selector={selector}, value={value}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -647,6 +710,13 @@ async def select_option(selector: str, value: str, **kwargs) -> str:
 async def hover(selector: str, **kwargs) -> str:
     """Hover over an element."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting hover.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: hover(selector={selector}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -674,7 +744,6 @@ async def hover(selector: str, **kwargs) -> str:
         return f"Hovered over {selector}"
     except Exception as e:
         logger.error(f"Failed to hover over {selector}: {e}")
-        
         return f"Error: Failed to hover over {selector}: {e}"
 
 @tool
@@ -682,6 +751,13 @@ async def hover(selector: str, **kwargs) -> str:
 async def wait_for_selector(selector: str, state: str = "visible", timeout: int = 5000, **kwargs) -> str:
     """Wait for a selector to reach a certain state (visible, attached, detached, hidden)."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    selector = resolve_selector(selector, dom_service, logger)
+    if not selector:
+        logger.error("Selector could not be resolved. Aborting wait_for_selector.")
+        return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: wait_for_selector(selector={selector}, state={state}, timeout={timeout}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -716,6 +792,14 @@ async def wait_for_selector(selector: str, state: str = "visible", timeout: int 
 async def screenshot(selector: str = None, path: str = None, **kwargs) -> str:
     """Take a screenshot of the current page or a specific element. If selector is None, capture the full page."""
     logger = logging.getLogger(__name__)
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    dom_service = browser_page.get_dom_service() if browser_page else None
+    if selector:
+        selector = resolve_selector(selector, dom_service, logger)
+        if not selector:
+            logger.error("Selector could not be resolved. Aborting screenshot.")
+            return "Error: Selector could not be resolved."
     logger.info(f"TOOL CALL: screenshot(selector={selector}, path={path}, kwargs={kwargs})")
     from ..browser.page_manager import PageManager
     browser_page = PageManager.get_instance().get_current_page()
@@ -757,7 +841,7 @@ from langchain.tools import tool
 
 @tool
 @resolve_hash_args
-async def list_suggestions(container_selector: str, option_selector: str = None, **kwargs) -> str:
+async def list_suggestions(container_selector: str, option_selector: str = None, **kwargs):
     """
     List all visible dropdown/autocomplete/rich suggestion options in a container.
     Args:
@@ -851,34 +935,52 @@ async def list_suggestions(container_selector: str, option_selector: str = None,
 
 
 # --- LLM Tool: Generate PDF from HTML ---
-from langchain.tools import tool
 
 @tool
-def generate_pdf_from_html(html: str, path: str = None) -> str:
-    """Generate a PDF from HTML content using Playwright. Args: html (str): HTML content. path (str, optional): Output PDF path. If a path is provided, a timestamp will be inserted before the .pdf extension. Returns: str: Path to the generated PDF or error message. All output filenames will be timestamped for uniqueness and traceability."""
+def generate_pdf_from_html(html: str, path: str = None, screens: Optional[List[str]] = None) -> str:
+    """
+    Generate a PDF from HTML content using Playwright. Optionally, embed screenshots as additional pages.
+
+    IMPORTANT FOR LLM:
+    - When calling this tool, you MUST collect all screenshot file paths from the action recorder.
+    - Screenshot actions are those where action['type'] == 'screenshot' and 'path' exists in action['args'].
+    - Pass these screenshot paths as the 'screens' argument. This ensures all relevant screenshots are included in the PDF.
+    - Example:
+        screens = [a['args']['path'] for a in actions if a.get('type') == 'screenshot' and 'path' in a.get('args', {})]
+
+    Args:
+        html: The HTML content to convert to PDF.
+        path: Optional output file path for the PDF.
+        screens: Optional list of screenshot image file paths to embed as additional pages in the PDF (see above).
+    Returns:
+        str: Path to the generated PDF file.
+    """
     import logging
     import asyncio
     from pathlib import Path
     from datetime import datetime
     from playwright.async_api import async_playwright
+    from fpdf import FPDF
+    import os
 
     logger = logging.getLogger(__name__)
     logger.info("TOOL CALL: generate_pdf_from_html() called")
+
     async def _generate():
         try:
+            # Generate the main HTML content to PDF using Playwright
             async with async_playwright() as p:
                 browser = await p.chromium.launch()
                 page = await browser.new_page()
                 await page.set_content(html)
-                from pathlib import Path
                 pdf_dir = Path("./generated/pdf")
                 pdf_dir.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 if path:
-                    p = Path(path)
-                    filename = p.name
+                    pth = Path(path)
+                    filename = pth.name
                     if filename.lower().endswith('.pdf'):
-                        filename = f"{p.stem}_{timestamp}{p.suffix}"
+                        filename = f"{pth.stem}_{timestamp}{pth.suffix}"
                     else:
                         filename = f"{filename}_{timestamp}.pdf"
                     output_path = str(pdf_dir / filename)
@@ -888,16 +990,54 @@ def generate_pdf_from_html(html: str, path: str = None) -> str:
                 logger.info(f"PDF will be saved to {output_path}")
                 await page.pdf(path=output_path)
                 await browser.close()
-                logger.info(f"PDF generated at {output_path}")
+
+            # If no screens, return the HTML-only PDF
+            if not screens:
+                logger.info(f"PDF generated at {output_path} (no screenshots)")
                 from ..services.action_service import ActionService
                 action_data = {
                     "type": "generate_pdf_from_html",
-                    "args": {"html": "<omitted>", "path": output_path}
+                    "args": {"html": "<omitted>", "path": output_path, "screens": screens}
                 }
                 ActionService.get_instance().record_agent_action(action_data)
                 logger.debug(f"[browser_tools] Agent actions after generate_pdf_from_html: {ActionService.get_instance().agent_actions}")
                 logger.debug(f"[browser_tools] Merged actions after generate_pdf_from_html: {ActionService.get_instance().actions}")
                 return output_path
+
+            # If screens are provided, combine PDF and images into a single PDF
+            # Use FPDF to merge the HTML-PDF and images
+            merged_pdf_path = output_path.replace('.pdf', '_with_screens.pdf')
+            pdf = FPDF()
+            # Add the HTML-rendered PDF as first page (as image)
+            try:
+                from pdf2image import convert_from_path
+                pages = convert_from_path(output_path)
+                for img in pages:
+                    img_path = output_path.replace('.pdf', '_page.png')
+                    img.save(img_path, 'PNG')
+                    pdf.add_page()
+                    pdf.image(img_path, x=10, y=10, w=pdf.w-20)
+                    os.remove(img_path)
+            except Exception as e:
+                logger.warning(f"Failed to convert HTML PDF to image: {e}. Skipping first-page image.")
+            # Add screenshots as subsequent pages
+            for screen_path in screens:
+                if os.path.exists(screen_path):
+                    pdf.add_page()
+                    pdf.image(screen_path, x=10, y=10, w=pdf.w-20)
+                else:
+                    logger.warning(f"Screenshot {screen_path} not found, skipping.")
+            pdf.output(merged_pdf_path)
+            logger.info(f"PDF with screenshots generated at {merged_pdf_path}")
+            from ..services.action_service import ActionService
+            action_data = {
+                "type": "generate_pdf_from_html",
+                "args": {"html": "<omitted>", "path": merged_pdf_path, "screens": screens}
+            }
+            ActionService.get_instance().record_agent_action(action_data)
+            logger.debug(f"[browser_tools] Agent actions after generate_pdf_from_html: {ActionService.get_instance().agent_actions}")
+            logger.debug(f"[browser_tools] Merged actions after generate_pdf_from_html: {ActionService.get_instance().actions}")
+            return merged_pdf_path
         except Exception as e:
             logger.error(f"Failed to generate PDF: {e}")
             return f"Error: Failed to generate PDF: {e}"
