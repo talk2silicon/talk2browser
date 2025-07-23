@@ -7,6 +7,8 @@ and execute browser automation tasks using Playwright.
 import os
 import logging
 import io
+
+
 from typing import Annotated, Sequence, TypedDict, Optional
 from PIL import Image  # For image compression
 
@@ -28,9 +30,9 @@ from ..browser.dom.service import DOMService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
-    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html, get_screenshot,
+    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html, 
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
-    set_code_in_editor, save_json
+    load_test_data, set_code_in_editor, save_json
 )
 from ..tools.script_tools import load_test_data
 from ..services.action_service import ActionService  # Ensure this is at the top
@@ -51,10 +53,8 @@ TOOLS = [
     click,
     fill,
     get_count,
-    is_enabled,
     list_suggestions,
     generate_pdf_from_html,
-    get_screenshot,
     generate_script,
     generate_negative_tests,
     replay_action_json_with_playwright,
@@ -473,63 +473,10 @@ class BrowserAgent:
                     for path in screenshots:
                         try:
                             # Add image compression to ensure size is under Claude's 5MB limit
-                            with Image.open(path) as img:
-                                # Start with quality 80 (good balance of quality and size)
-                                quality = 80
-                                max_size = 4.5 * 1024 * 1024  # 4.5MB to be safe (buffer below 5MB)
-                                
-                                # First try: compress with initial quality
-                                compressed_img = io.BytesIO()
-                                img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                
-                                # Check if size is still too large
-                                while compressed_img.tell() > max_size and quality > 15:
-                                    # Reduce quality and try again
-                                    quality -= 10
-                                    logger.debug(f"[Agent] Reducing image quality to {quality} to meet size limit")
-                                    compressed_img = io.BytesIO()
-                                    img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                
-                                # If still too large, resize the image
-                                if compressed_img.tell() > max_size:
-                                    # Calculate new dimensions to reduce by 25% each time
-                                    width, height = img.size
-                                    resize_factor = 0.75
-                                    
-                                    while compressed_img.tell() > max_size and resize_factor > 0.3:
-                                        new_width = int(width * resize_factor)
-                                        new_height = int(height * resize_factor)
-                                        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
-                                        
-                                        # Try with the resized image
-                                        compressed_img = io.BytesIO()
-                                        resized_img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                        
-                                        # If still too large, reduce size further
-                                        if compressed_img.tell() > max_size:
-                                            resize_factor -= 0.15
-                                        else:
-                                            break
-                                    
-                                    logger.debug(f"[Agent] Resized image to {resize_factor:.2f}x original size to meet size limit")
-                                
-                                # Get the compressed image bytes
-                                compressed_img.seek(0)
-                                img_bytes = compressed_img.read()
-                                
-                                # Final size check - if still too large, use extreme measures
-                                if len(img_bytes) > max_size:
-                                    logger.warning(f"[Agent] Image still too large ({len(img_bytes)/1024/1024:.2f}MB), using grayscale conversion")
-                                    gray_img = img.convert('L')  # Convert to grayscale
-                                    compressed_img = io.BytesIO()
-                                    gray_img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                    compressed_img.seek(0)
-                                    img_bytes = compressed_img.read()
-                                
-                                # Encode to base64
-                                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-                                screenshot_blobs.append(img_b64)
-                                logger.info(f"[Agent] Added compressed screenshot {path} to LLM vision input (base64, {len(img_b64)} bytes, quality={quality})")
+                            from src.talk2browser.tools.file_system_tools import compress_image_to_size_limit
+                            compressed_img = compress_image_to_size_limit(path)
+                            img_bytes = compressed_img.read()
+                # Final size check - if still too large, use extreme measures
                         except Exception as e:
                             logger.error(f"[Agent] Failed to encode/compress screenshot {path} for LLM: {e}")
                 if is_vision_enabled():
@@ -581,19 +528,6 @@ class BrowserAgent:
                 if user_msg and isinstance(user_msg.content, str):
                     # Replace string content with a list of content blocks
                     content_blocks = [{"type": "text", "text": user_msg.content}]
-                    for blob in screenshot_blobs:
-                        logger.debug(f"[Agent] Screenshot blob type: {type(blob)}, length: {len(blob) if isinstance(blob, str) else 'N/A'}")
-                        if isinstance(blob, str) and blob.strip():
-                            content_blocks.append({
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": blob
-                                }
-                            })
-                        else:
-                            logger.error(f"[Agent] Skipping invalid screenshot blob: {blob}")
                     logger.debug(f"[Agent] LLM HumanMessage content blocks: {content_blocks}")
                     messages[i] = HumanMessage(content=content_blocks)
             
@@ -611,41 +545,7 @@ class BrowserAgent:
             # Check if response has tool calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
                 logger.info("Tool calls detected in LLM response")
-                # --- Calendar Trigger Post-Processing ---
-                try:
-                    # Only process if the last tool call is a click
-                    last_tool_call = response.tool_calls[-1] if response.tool_calls else None
-                    if last_tool_call and (getattr(last_tool_call, 'name', None) == 'click' or (isinstance(last_tool_call, dict) and last_tool_call.get('name') == 'click')):
-                        # Try to extract selector/label for calendar detection
-                        args = getattr(last_tool_call, 'args', None) or last_tool_call.get('args', {})
-                        selector = args.get('selector', '') if args else ''
-                        # Heuristic: look for calendar triggers by selector or label
-                        calendar_keywords = ['calendar', 'date', 'check in', 'check out', 'add dates']
-                        if any(k in selector.lower() for k in calendar_keywords):
-                            #logger.info(f"[Calendar Hook] Detected calendar trigger click: {selector}. Will wait for popup...")
-                            # Wait for a likely calendar popup (heuristic selector)
-                            popup_selectors = ['[role="dialog"]', '.calendar', '.datepicker', '[data-testid*="calendar"]', '[aria-label*="calendar"]']
-                            from ..tools.browser_tools import wait_for_selector
-                            found_popup = False
-                            for popup_selector in popup_selectors:
-                                #logger.info(f"[Calendar Hook] Waiting for popup selector: {popup_selector}")
-                                result = await wait_for_selector(popup_selector, state="visible", timeout=4000)
-                                #logger.info(f"[Calendar Hook] wait_for_selector result for {popup_selector}: {result}")
-                                if 'Waited' in result:
-                                    found_popup = True
-                                    break
-                            if not found_popup:
-                                logger.warning(f"[Calendar Hook] No calendar popup appeared after click on {selector}")
-                            else:
-                                # Refresh DOM after popup appears
-                                browser_page = PageManager.get_instance().get_current_page()
-                                dom_service = browser_page.get_dom_service() if browser_page else None
-                                if dom_service:
-                                    #logger.info("[Calendar Hook] Refreshing interactive elements after calendar popup...")
-                                    await dom_service.get_interactive_elements(highlight=True)
-                                    #logger.info("[Calendar Hook] DOM refreshed after calendar popup.")
-                except Exception as cal_exc:
-                    logger.error(f"[Calendar Hook] Error in calendar post-processing: {cal_exc}", exc_info=True)
+                # DOM post-processing is now handled by explicit LLM/tool calls, not by the agent.
                 return {
                     "messages": messages + [response],
                     "next": "tools"
@@ -702,19 +602,8 @@ class BrowserAgent:
             # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
                 path = ActionService.get_instance().save_merged_actions_with_prompt(task)
-                # --- PDF screenshot extraction and generation ---
-                # Extract screenshot paths from actions
-                actions = ActionService.get_instance().actions
-                screenshot_paths = [
-                    a["args"].get("path") for a in actions
-                    if a.get("type") == "screenshot" and "path" in a.get("args", {})
-                ]
-                # If a PDF report is to be generated, pass screenshots to the PDF tool (pseudo, adapt as needed):
-                # generate_pdf_from_html(html_content, path=pdf_path, screens=screenshot_paths)
-                # (Integrate this call where your PDF generation is triggered)
             except Exception as final_exc:
                 logger.error(f"Failed to save merged actions: {final_exc}")
-            # --- End final block ---
             return response
         except Exception as e:
             error_msg = f"Error running agent: {str(e)}"

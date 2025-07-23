@@ -549,3 +549,28 @@ class DOMService:
                 return selector
         logger.error(f"Could not resolve selector hash: {hash_val}")
         return None
+
+    async def wait_for_calendar_popup(self, selector: str = '', timeout: int = 4000) -> bool:
+        """
+        Wait for a likely calendar popup after a click, based on selector heuristics.
+        Returns True if a popup was detected, False otherwise.
+        """
+        calendar_keywords = ['calendar', 'date', 'check in', 'check out', 'add dates']
+        if not any(k in selector.lower() for k in calendar_keywords):
+            logger.info(f"[DOMService] Selector '{selector}' does not match calendar keywords.")
+            return False
+        popup_selectors = ['[role="dialog"]', '.calendar', '.datepicker', '[data-testid*="calendar"]', '[aria-label*="calendar"]']
+        found_popup = False
+        from ...tools.browser_tools import wait_for_selector
+        for popup_selector in popup_selectors:
+            try:
+                result = await wait_for_selector(popup_selector, state="visible", timeout=timeout)
+                if 'Waited' in result:
+                    logger.info(f"[DOMService] Calendar popup detected with selector: {popup_selector}")
+                    found_popup = True
+                    break
+            except Exception as e:
+                logger.warning(f"[DOMService] Error waiting for {popup_selector}: {e}")
+        if not found_popup:
+            logger.warning(f"[DOMService] No calendar popup appeared after click on {selector}")
+        return found_popup

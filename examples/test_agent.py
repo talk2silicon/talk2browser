@@ -56,10 +56,7 @@ TASKS = {
     "tiktok_trending": (
         "Go to https://www.tiktok.com/channel/trending-now?lang=en. "
         "Wait for the trending videos to load. "
-        "find the video with most views and click on it. "
-        "Wait for the video to load. "
-        "Find the like count and print it. "
-        "Include a screenshot of every step as additional pages at the end of the PDF report."
+        "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
     ),
     "amazon_bose": (
         "Go to https://www.amazon.com.au. "

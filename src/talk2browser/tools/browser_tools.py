@@ -241,6 +241,11 @@ async def get_count(selector: str, **kwargs) -> int:
         elements = await page.query_selector_all(selector)
         count = len(elements)
         logger.info(f"Found {count} elements for {selector}")
+        # --- Screenshot capture after get_count ---
+        screenshot_path = await capture_screenshot_for_action(page, "get_count", logger)
+        if screenshot_path:
+            from ..services.action_service import ActionService
+            ActionService.get_instance().record_screenshot(screenshot_path)
         from ..services.action_service import ActionService
         action_data = {
             "type": "get_count",
@@ -270,12 +275,18 @@ async def navigate(url: str) -> str:
         return "Error: No active browser page."
     page = browser_page.get_page()
     logger.info(f"Navigating BrowserPage (url before: {getattr(page, 'url', None)}) to {url}")
-    await page.goto(url)
+    await page.goto(url, wait_until="networkidle")
+    logger.info(f"Navigated to {url}")
+    # --- Screenshot capture after navigation ---
+    screenshot_path = await capture_screenshot_for_action(page, "navigate", logger)
+    if screenshot_path:
+        from ..services.action_service import ActionService
+        ActionService.get_instance().record_screenshot(screenshot_path)
     title = await page.title()
     from ..services.action_service import ActionService
     import os
     screenshot_path = None
-    if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+    if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1" or os.getenv("T2B_SCREENSHOT_EVERY_STEP", "0") == "1":
         screenshot_path = await capture_screenshot_for_action(page, "navigate", logger, success=True)
     action_data = {
         "type": "navigate",
@@ -365,7 +376,7 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         logger.debug(f"[browser_tools] Merged actions after click: {ActionService.get_instance().actions}")
         import os
         screenshot_path = None
-        if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+        if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1" or os.getenv("T2B_SCREENSHOT_EVERY_STEP", "0") == "1":
             screenshot_path = await capture_screenshot_for_action(page, "click", logger, success=True)
             if screenshot_path:
                 action_data['screenshot_path'] = screenshot_path
@@ -434,6 +445,12 @@ async def fill(selector: str, text: str, **kwargs) -> str:
         locator = page.locator(selector)
         try:
             await locator.fill(text)
+            logger.info(f"Filled element {selector} with text: {text}")
+            # --- Screenshot capture after fill ---
+            screenshot_path = await capture_screenshot_for_action(page, "fill", logger)
+            if screenshot_path:
+                from ..services.action_service import ActionService
+                ActionService.get_instance().record_screenshot(screenshot_path)
             logger.info(f"Filled field {selector} with text: {text} on BrowserPage (url: {page.url})")
             from ..services.action_service import ActionService
             # --- Ensure selector hash is resolved and included in args for ActionService ---
@@ -478,7 +495,7 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                 logger.debug(f"Fetched dom_service in finally block: {dom_service}")
             import os
             screenshot_path = None
-            if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
+            if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1" or os.getenv("T2B_SCREENSHOT_EVERY_STEP", "0") == "1":
                 screenshot_path = await capture_screenshot_for_action(page, "fill", logger, success=True)
                 if screenshot_path:
                     action_data['screenshot_path'] = screenshot_path
@@ -535,6 +552,11 @@ async def type(selector: str, text: str, **kwargs) -> str:
         locator = page.locator(selector)
         await locator.type(text)
         logger.info(f"Typed '{text}' into {selector}")
+        # --- Screenshot capture after type ---
+        screenshot_path = await capture_screenshot_for_action(page, "type", logger)
+        if screenshot_path:
+            from ..services.action_service import ActionService
+            ActionService.get_instance().record_screenshot(screenshot_path)
         from ..services.action_service import ActionService
         action_data = {
             "type": "type",
@@ -835,70 +857,12 @@ async def list_interactive_elements() -> str:
     """List interactive elements on the page. (Internal service, not an LLM tool.)"""
     pass
 
-
-# --- LLM Tool: Screenshot Capture & History ---
-from langchain.tools import tool
-
-@tool
-def get_screenshot(selector: str = None, mode: str = "capture") -> str:
-    """
-    Capture a screenshot (optionally by selector) or return all screenshot paths from the action recorder.
-    Args:
-        selector: (optional) CSS selector for element screenshot.
-        mode: "capture" (default) to take a screenshot, "history" to return all screenshot paths.
-    Returns:
-        str (path) or list of paths.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    from ..services.action_service import ActionService
-    from ..browser.page_manager import PageManager
-
-    if mode == "history":
-        actions = ActionService.get_instance().agent_actions
-        return [
-            a['args']['path']
-            for a in actions
-            if a.get('type') == 'screenshot' and 'path' in a.get('args', {})
-        ]
-
-    browser_page = PageManager.get_instance().get_current_page()
-    if not browser_page:
-        return "Error: No active browser page."
-    page = browser_page.get_page()
-    from pathlib import Path
-    import datetime
-    screenshots_dir = Path("./screenshots")
-    screenshots_dir.mkdir(parents=True, exist_ok=True)
-    # Use provided time source for reproducibility
-    timestamp = "20250719_192531"  # 2025-07-19T19:25:31+10:00
-    screenshot_path = str(screenshots_dir / f"screenshot_{timestamp}.png")
-    import asyncio
-    async def take():
-        if selector:
-            await page.locator(selector).screenshot(path=screenshot_path)
-        else:
-            await page.screenshot(path=screenshot_path, full_page=True)
-    # Run the async screenshot logic synchronously for tool compatibility
-    try:
-        asyncio.get_event_loop().run_until_complete(take())
-    except RuntimeError:
-        # If already in event loop (e.g. in pytest), use create_task
-        import nest_asyncio
-        nest_asyncio.apply()
-        asyncio.get_event_loop().run_until_complete(take())
-    ActionService.get_instance().record_agent_action({
-        "type": "screenshot",
-        "args": {"path": screenshot_path, "selector": selector}
-    })
-    return screenshot_path
-
 # --- LLM Tool: List Suggestions for Dropdown/Autocomplete ---
 from langchain.tools import tool
 
 @tool
 @resolve_hash_args
-async def list_suggestions(container_selector: str, option_selector: str = None, **kwargs):
+async def list_suggestions(container_selector: str, option_selector: str = None, **kwargs) -> str:
     """
     List all visible dropdown/autocomplete/rich suggestion options in a container.
     Args:
@@ -919,11 +883,16 @@ async def list_suggestions(container_selector: str, option_selector: str = None,
 
     try:
         option_selector = option_selector or "> *"
-        
+        # Resolve hash selectors to real selectors using DOMService
+        from .browser_tools import resolve_selector  # adjust import if needed
+        container_selector = resolve_selector(container_selector, dom_service, logger)
+        option_selector = resolve_selector(option_selector, dom_service, logger)
+        if not container_selector:
+            logger.error("Container selector could not be resolved. Aborting list_suggestions.")
+            return json.dumps({"error": "Container selector could not be resolved."})
         # Normalize selectors before using them with Playwright
         container_selector = normalize_selector(container_selector, logger)
         option_selector = normalize_selector(option_selector, logger)
-        
         # Handle XPath selectors specially - can't combine XPath selectors with spaces
         if container_selector.startswith('xpath=') or option_selector.startswith('xpath='):
             # If both are XPath, we can only use one (container takes precedence)
@@ -985,30 +954,81 @@ async def list_suggestions(container_selector: str, option_selector: str = None,
                 "link_hash": link_hash
             })
         logger.info(f"[list_suggestions] Suggestions: {suggestions}")
+        # --- Screenshot capture after list_suggestions ---
+        screenshot_path = await capture_screenshot_for_action(page, "list_suggestions", logger)
+        if screenshot_path:
+            from ..services.action_service import ActionService
+            ActionService.get_instance().record_screenshot(screenshot_path)
         return json.dumps(suggestions)
     except Exception as e:
         logger.error(f"[list_suggestions] Failed: {e}")
         return json.dumps({"error": str(e)})
 
+# --- LLM Tool: Screenshot Capture & History ---
+from langchain.tools import tool
+
+# No longer exposed as an LLM tool. Use only internally if needed.
+def get_screenshot(selector: str = None, mode: str = "capture") -> Union[str, List[str]]:
+    """
+    Capture a screenshot (optionally by selector) or return all screenshot paths from the action recorder.
+    Args:
+        selector: (optional) CSS selector for element screenshot.
+        mode: "capture" (default) to take a screenshot, "history" to return all screenshot paths.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    from ..services.action_service import ActionService
+    from ..browser.page_manager import PageManager
+
+    if mode in ("history", "all", "list"):
+        actions = ActionService.get_instance().agent_actions
+        return [
+            a['args']['path']
+            for a in actions
+            if a.get('type') == 'screenshot' and 'path' in a.get('args', {})
+        ]
+
+    browser_page = PageManager.get_instance().get_current_page()
+    if not browser_page:
+        return "Error: No active browser page."
+    page = browser_page.get_page()
+    from pathlib import Path
+    import datetime
+    screenshots_dir = Path("./screenshots")
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+    # Use provided time source for reproducibility
+    timestamp = "20250719_192531"  # 2025-07-19T19:25:31+10:00
+    screenshot_path = str(screenshots_dir / f"screenshot_{timestamp}.png")
+    import asyncio
+    async def take():
+        if selector:
+            await page.locator(selector).screenshot(path=screenshot_path)
+        else:
+            await page.screenshot(path=screenshot_path, full_page=True)
+    # Run the async screenshot logic synchronously for tool compatibility
+    try:
+        asyncio.get_event_loop().run_until_complete(take())
+    except RuntimeError:
+        # If already in event loop (e.g. in pytest), use create_task
+        import nest_asyncio
+        nest_asyncio.apply()
+        asyncio.get_event_loop().run_until_complete(take())
+    ActionService.get_instance().record_agent_action({
+        "type": "screenshot",
+        "args": {"path": screenshot_path, "selector": selector}
+    })
+    return screenshot_path
+
 
 # --- LLM Tool: Generate PDF from HTML ---
-
 @tool
-def generate_pdf_from_html(html: str, path: str = None, screens: Optional[List[str]] = None) -> str:
+def generate_pdf_from_html(html: str, path: str = None) -> str:
     """
-    Generate a PDF from HTML content using Playwright. Optionally, embed screenshots as additional pages.
-
-    IMPORTANT FOR LLM:
-    - When calling this tool, you MUST collect all screenshot file paths from the action recorder.
-    - Screenshot actions are those where action['type'] == 'screenshot' and 'path' exists in action['args'].
-    - Pass these screenshot paths as the 'screens' argument. This ensures all relevant screenshots are included in the PDF.
-    - Example:
-        screens = [a['args']['path'] for a in actions if a.get('type') == 'screenshot' and 'path' in a.get('args', {})]
+    Generate a PDF from HTML content using Playwright. Automatically embeds all screenshots recorded in ActionService as additional pages.
 
     Args:
         html: The HTML content to convert to PDF.
         path: Optional output file path for the PDF.
-        screens: Optional list of screenshot image file paths to embed as additional pages in the PDF (see above).
     Returns:
         str: Path to the generated PDF file.
     """
@@ -1048,21 +1068,24 @@ def generate_pdf_from_html(html: str, path: str = None, screens: Optional[List[s
                 await page.pdf(path=output_path)
                 await browser.close()
 
-            # If no screens, return the HTML-only PDF
-            if not screens:
+            # Always collect screenshots from ActionService history
+            from ..services.action_service import ActionService
+            actions = ActionService.get_instance().actions
+            screenshot_paths = [a['args']['path'] for a in actions if a.get('type') == 'screenshot' and 'path' in a.get('args', {})]
+
+            # If no screenshots, return the HTML-only PDF
+            if not screenshot_paths:
                 logger.info(f"PDF generated at {output_path} (no screenshots)")
-                from ..services.action_service import ActionService
                 action_data = {
                     "type": "generate_pdf_from_html",
-                    "args": {"html": "<omitted>", "path": output_path, "screens": screens}
+                    "args": {"html": "<omitted>", "path": output_path}
                 }
                 ActionService.get_instance().record_agent_action(action_data)
                 logger.debug(f"[browser_tools] Agent actions after generate_pdf_from_html: {ActionService.get_instance().agent_actions}")
                 logger.debug(f"[browser_tools] Merged actions after generate_pdf_from_html: {ActionService.get_instance().actions}")
                 return output_path
 
-            # If screens are provided, combine PDF and images into a single PDF
-            # Use FPDF to merge the HTML-PDF and images
+            # Combine PDF and screenshots into a single PDF
             merged_pdf_path = output_path.replace('.pdf', '_with_screens.pdf')
             pdf = FPDF()
             # Add the HTML-rendered PDF as first page (as image)
@@ -1078,7 +1101,7 @@ def generate_pdf_from_html(html: str, path: str = None, screens: Optional[List[s
             except Exception as e:
                 logger.warning(f"Failed to convert HTML PDF to image: {e}. Skipping first-page image.")
             # Add screenshots as subsequent pages
-            for screen_path in screens:
+            for screen_path in screenshot_paths:
                 if os.path.exists(screen_path):
                     pdf.add_page()
                     pdf.image(screen_path, x=10, y=10, w=pdf.w-20)
@@ -1086,10 +1109,9 @@ def generate_pdf_from_html(html: str, path: str = None, screens: Optional[List[s
                     logger.warning(f"Screenshot {screen_path} not found, skipping.")
             pdf.output(merged_pdf_path)
             logger.info(f"PDF with screenshots generated at {merged_pdf_path}")
-            from ..services.action_service import ActionService
             action_data = {
                 "type": "generate_pdf_from_html",
-                "args": {"html": "<omitted>", "path": merged_pdf_path, "screens": screens}
+                "args": {"html": "<omitted>", "path": merged_pdf_path}
             }
             ActionService.get_instance().record_agent_action(action_data)
             logger.debug(f"[browser_tools] Agent actions after generate_pdf_from_html: {ActionService.get_instance().agent_actions}")
