@@ -1,3 +1,10 @@
+<div align="center">
+  <img src="assets/logo.svg" alt="Talk2Browser Logo" height="100" />
+  
+  <br/>
+  <a href="http://www.talk2browser.com" target="_blank"><b>Visit the website &rarr; talk2browser.com</b></a>
+</div>
+
 # Talk2Browser
 
 [![Watch the demo on YouTube](assets/talk2browser.png)](https://youtu.be/mOcW7bFahdk)
