@@ -64,16 +64,8 @@ TASKS = {
     "amazon_bose": (
         "Go to https://www.amazon.com.au. "
         "Search for 'Bose Smart Ultra Soundbar'. "
-        "Order by review count. "
-        "Extract information about all available options including: "
-        "- Product name "
-        "- Price "
-        "- Seller/retailer name "
-        "- Rating (if available) "
-        "- Delivery options (if available) "
         "Create a comprehensive PDF report with all the extracted information, "
         "formatted in a clean and readable way with proper headings and sections. "
-        "Include a screenshot of every step as additional pages at the end of the PDF report."
     )
 }
 

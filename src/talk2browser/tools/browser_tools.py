@@ -241,11 +241,6 @@ async def get_count(selector: str, **kwargs) -> int:
         elements = await page.query_selector_all(selector)
         count = len(elements)
         logger.info(f"Found {count} elements for {selector}")
-        # --- Screenshot capture after get_count ---
-        screenshot_path = await capture_screenshot_for_action(page, "get_count", logger)
-        if screenshot_path:
-            from ..services.action_service import ActionService
-            ActionService.get_instance().record_screenshot(screenshot_path)
         from ..services.action_service import ActionService
         action_data = {
             "type": "get_count",
@@ -562,23 +557,6 @@ async def type(selector: str, text: str, **kwargs) -> str:
             "type": "type",
             "args": {"selector": selector, "text": text}
         }
-        # --- Ensure selector hash is resolved and included in args for ActionService ---
-        hash_val = None
-        if browser_page and hasattr(browser_page, "get_dom_service"):
-            dom_service = browser_page.get_dom_service()
-            if dom_service:
-                if selector and isinstance(selector, str):
-                    if selector.startswith('#'):
-                        hash_val = selector
-                    else:
-                        element_map = getattr(dom_service, '_element_map', {})
-                        for h, sel in element_map.items():
-                            if sel == selector:
-                                hash_val = h
-                                break
-        logger.debug(f"[type] Resolved hash for selector '{selector}': {hash_val}")
-        if hash_val:
-            action_data['args']['hash'] = hash_val
         ActionService.get_instance().record_agent_action(action_data)
         logger.debug(f"[browser_tools] Agent actions after type: {ActionService.get_instance().agent_actions}")
         logger.debug(f"[browser_tools] Merged actions after type: {ActionService.get_instance().actions}")
@@ -1100,13 +1078,31 @@ def generate_pdf_from_html(html: str, path: str = None) -> str:
                     os.remove(img_path)
             except Exception as e:
                 logger.warning(f"Failed to convert HTML PDF to image: {e}. Skipping first-page image.")
-            # Add screenshots as subsequent pages
-            for screen_path in screenshot_paths:
-                if os.path.exists(screen_path):
-                    pdf.add_page()
-                    pdf.image(screen_path, x=10, y=10, w=pdf.w-20)
-                else:
-                    logger.warning(f"Screenshot {screen_path} not found, skipping.")
+
+            # Add a single page for all screenshots stacked vertically
+            if screenshot_paths:
+                pdf.add_page()
+                y_offset = 10
+                max_height = pdf.h - 20  # 10pt margin top/bottom
+                max_width = pdf.w - 20   # 10pt margin left/right
+                for screen_path in screenshot_paths:
+                    if os.path.exists(screen_path):
+                        try:
+                            from PIL import Image
+                            img = Image.open(screen_path)
+                            img_w, img_h = img.size
+                            scale = max_width / img_w
+                            new_w = max_width
+                            new_h = img_h * scale
+                            if y_offset + new_h > max_height:
+                                break  # No more space; optionally, could add another page
+                            pdf.image(screen_path, x=10, y=y_offset, w=new_w, h=new_h)
+                            y_offset += new_h + 5  # 5pt vertical gap
+                        except Exception as e:
+                            logger.warning(f"Failed to add screenshot {screen_path}: {e}")
+                    else:
+                        logger.warning(f"Screenshot {screen_path} not found, skipping.")
+
             pdf.output(merged_pdf_path)
             logger.info(f"PDF with screenshots generated at {merged_pdf_path}")
             action_data = {
