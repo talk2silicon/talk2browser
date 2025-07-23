@@ -69,6 +69,19 @@ class ActionService:
         logger.debug(f"[ActionService] Agent actions now has {len(self.agent_actions)} actions: {self.agent_actions}")
         self._perform_realtime_merge()
 
+    def record_screenshot(self, screenshot_path: str):
+        """
+        Record a screenshot as an agent action for later use in PDF reports.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        action = {
+            "type": "screenshot",
+            "args": {"path": screenshot_path}
+        }
+        logger.info(f"[ActionService] Recorded screenshot: {screenshot_path}")
+        self.record_agent_action(action)
+
     def __init__(self, dom_service=None):
         if ActionService._instance is not None:
             raise RuntimeError("ActionService is a singleton. Use ActionService.get_instance().")
@@ -76,11 +89,16 @@ class ActionService:
         self.agent_actions: List[Dict[str, Any]] = []
         self._actions: List[Dict[str, Any]] = []  # Canonical merged list
         self.dom_service = dom_service
+        logger = logging.getLogger(__name__)
         logger.debug("ActionService singleton instance initialized.")
         ActionService._instance = self
 
         # Manual mode (pause/resume) state
         import asyncio
+        self._resume_event = asyncio.Event()
+        self._resume_event.set()  # Start in agent mode
+        self._manual_mode = False
+        self._timeout_task = None
         self._resume_event = asyncio.Event()
         self._resume_event.set()  # Start in agent mode
         self._manual_mode = False
