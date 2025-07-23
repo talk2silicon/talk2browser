@@ -56,6 +56,9 @@ TASKS = {
     "tiktok_trending": (
         "Go to https://www.tiktok.com/channel/trending-now?lang=en. "
         "Wait for the trending videos to load. "
+        "Extract titles"
+        "Extract descriptions"
+        "Extract links"
         "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
     ),
     "amazon_bose": (
