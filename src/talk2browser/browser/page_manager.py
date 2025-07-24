@@ -1,6 +1,7 @@
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 from .page import BrowserPage
+
 
 class PageManager:
     """
@@ -8,6 +9,7 @@ class PageManager:
     Provides methods to create, switch, close, and list pages.
     Implements the singleton pattern so all code can use PageManager.get_instance().
     """
+
     _instance = None
 
     def __init__(self):
@@ -20,9 +22,13 @@ class PageManager:
     def get_instance(cls):
         if cls._instance is None:
             cls._instance = cls()
-            logging.getLogger(__name__).debug(f"Created PageManager singleton id: {id(cls._instance)}")
+            logging.getLogger(__name__).debug(
+                f"Created PageManager singleton id: {id(cls._instance)}"
+            )
         else:
-            logging.getLogger(__name__).debug(f"Using existing PageManager singleton id: {id(cls._instance)}")
+            logging.getLogger(__name__).debug(
+                f"Using existing PageManager singleton id: {id(cls._instance)}"
+            )
         return cls._instance
 
     def add_page(self, page_id: str, browser_page: BrowserPage):
@@ -53,12 +59,14 @@ class PageManager:
         self.logger.debug(f"PageManager instance id in close_page: {id(self)}")
 
     def get_current_page(self) -> Optional[BrowserPage]:
-        self.logger.debug(f"PageManager instance id in get_current_page: {id(self)} | current_page_id: {self.current_page_id}")
+        self.logger.debug(
+            f"PageManager instance id in get_current_page: {id(self)} | current_page_id: {self.current_page_id}"
+        )
         if self.current_page_id:
             return self.pages.get(self.current_page_id)
         return None
 
-    def list_pages(self) -> List[str]:
+    def list_pages(self) -> list[str]:
         return list(self.pages.keys())
 
     def get_page(self, page_id: str) -> Optional[BrowserPage]:

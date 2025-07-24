@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Main entry point for the talk2browser CLI."""
 
+
 def main():
     """Run the talk2browser CLI."""
     print("Talk2Browser - Self-improving browser automation")

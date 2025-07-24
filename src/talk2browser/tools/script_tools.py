@@ -1,14 +1,17 @@
-import logging
-from typing import Optional, List, Any
+import asyncio
 import json
+import logging
 import os
+import re
+from typing import Optional, List
 from langchain_core.tools import tool
+
 # Use singleton getter everywhere; do not instantiate directly.
-from langchain_anthropic import ChatAnthropic
 from ..agent.llm_singleton import get_llm
 from ..services.action_service import ActionService
 
 logger = logging.getLogger(__name__)
+
 
 @tool
 def generate_script(language: str, task: str, prompt: Optional[str] = None) -> str:
@@ -24,11 +27,18 @@ def generate_script(language: str, task: str, prompt: Optional[str] = None) -> s
     # Get the singleton instance directly
     action_service = ActionService.get_instance()
     # Log the singleton instance ID for debugging
-    logger.info(f"[ScriptTools] ActionService singleton ID: {id(action_service)} in generate_script")
-    logger.info(f"[ScriptTools] ENTER generate_script: language={language}, task={task}, prompt={prompt}")
+    logger.info(
+        f"[ScriptTools] ActionService singleton ID: {id(action_service)} in generate_script"
+    )
+    logger.info(
+        f"[ScriptTools] ENTER generate_script: language={language}, task={task}, prompt={prompt}"
+    )
     try:
         from ..services.script_generation_service import ScriptGenerationService
-        logger.debug(f"[ScriptTools] generate_script called. Checking action_service registration: {action_service}")
+
+        logger.debug(
+            f"[ScriptTools] generate_script called. Checking action_service registration: {action_service}"
+        )
         actions = action_service.actions
         if not actions:
             logger.error("No actions available in ActionService for script generation.")
@@ -36,20 +46,27 @@ def generate_script(language: str, task: str, prompt: Optional[str] = None) -> s
         llm = get_llm()
         logger.debug(f"[ScriptTools] Got LLM instance: {llm}")
         script_service = ScriptGenerationService(llm=llm)
-        logger.info(f"[ScriptTools] Using canonical actions for script generation: {json.dumps(actions, indent=2)}")
+        logger.info(
+            f"[ScriptTools] Using canonical actions for script generation: {json.dumps(actions, indent=2)}"
+        )
         logger.info(f"[ScriptTools] Generating {language} script for scenario: {task}")
-        if language.lower() == 'playwright':
+        if language.lower() == "playwright":
             import asyncio
-            result = asyncio.run(script_service.generate_playwright_script(actions, task))
+
+            result = asyncio.run(
+                script_service.generate_playwright_script(actions, task)
+            )
             logger.info(f"[ScriptTools] Returning playwright script path: {result}")
             return result
-        elif language.lower() == 'cypress':
+        elif language.lower() == "cypress":
             import asyncio
+
             result = asyncio.run(script_service.generate_cypress_script(actions, task))
             logger.info(f"[ScriptTools] Returning cypress script path: {result}")
             return result
-        elif language.lower() == 'selenium':
+        elif language.lower() == "selenium":
             import asyncio
+
             result = asyncio.run(script_service.generate_selenium_script(actions, task))
             logger.info(f"[ScriptTools] Returning selenium script path: {result}")
             return result
@@ -57,10 +74,14 @@ def generate_script(language: str, task: str, prompt: Optional[str] = None) -> s
             logger.error(f"[ScriptTools] Unsupported language: {language}")
             raise ValueError(f"Unsupported language: {language}")
     except Exception as exc:
-        logger.error(f"[ScriptTools] Exception in generate_script: {exc}", exc_info=True)
+        logger.error(
+            f"[ScriptTools] Exception in generate_script: {exc}", exc_info=True
+        )
         raise
     finally:
-        logger.info(f"[ScriptTools] EXIT generate_script for language={language}, task={task}")
+        logger.info(
+            f"[ScriptTools] EXIT generate_script for language={language}, task={task}"
+        )
 
 
 @tool
@@ -73,8 +94,10 @@ def generate_negative_tests(language: str, prompt: str) -> List[str]:
     Returns:
         List of paths to generated negative test scripts.
     """
-    actions = action_service.actions
-    logger.info(f"[ScriptTools] Using canonical merged actions for negative test generation: {json.dumps(actions, indent=2)}")
+    actions = ActionService.get_instance().actions
+    logger.info(
+        f"[ScriptTools] Using canonical merged actions for negative test generation: {json.dumps(actions, indent=2)}"
+    )
     if not actions:
         logger.error("No actions recorded in memory for negative test generation.")
         raise ValueError("No actions recorded.")
@@ -86,20 +109,18 @@ def generate_negative_tests(language: str, prompt: str) -> List[str]:
         "Only output the code, no markdown or explanation."
     )
     response = llm.invoke(llm_prompt)
-    safe_prompt = prompt.lower().replace(' ', '_').replace('/', '_')[:40]
+    safe_prompt = prompt.lower().replace(" ", "_").replace("/", "_")[:40]
     script_ext = {
-        'playwright': 'py',
-        'cypress': 'cy.js',
-        'selenium': 'selenium.py'
-    }.get(language.lower(), 'txt')
-    script_path = os.path.join('generated', f"negative_test_{safe_prompt}.{script_ext}")
-    with open(script_path, 'w') as f:
+        "playwright": "py",
+        "cypress": "cy.js",
+        "selenium": "selenium.py",
+    }.get(language.lower(), "txt")
+    script_path = os.path.join("generated", f"negative_test_{safe_prompt}.{script_ext}")
+    with open(script_path, "w") as f:
         f.write(response)
     logger.info(f"Generated negative test script saved to {script_path}")
     return [script_path]
 
-from langchain_core.tools import tool
-import json, os, re, logging, asyncio
 
 @tool
 def load_test_data(file_path: str) -> dict:
@@ -125,13 +146,11 @@ def load_test_data(file_path: str) -> dict:
                 data = f.read()
                 file_type = file_ext.lstrip(".") or "text"
         logger.info(f"[load_test_data] Loaded {file_type} test data from {file_path}")
-        return {
-            "file_type": file_type,
-            "data": data
-        }
+        return {"file_type": file_type, "data": data}
     except Exception as e:
         logger.error(f"[load_test_data] Error loading data from {file_path}: {e}")
         return {"error": str(e)}
+
 
 @tool
 async def replay_action_json_with_playwright(action_json_path: str) -> str:
@@ -153,7 +172,7 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
 
     with open(action_json_path) as f:
         data = json.load(f)
-    actions = data['actions'] if 'actions' in data else data
+    actions = data["actions"] if "actions" in data else data
     logger.info(f"[REPLAY] Loaded actions: {json.dumps(actions, indent=2)}")
 
     page_manager = PageManager.get_instance()
@@ -166,41 +185,53 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
     def resolve_placeholders(val):
         if not isinstance(val, str):
             return val
+
         def repl(match):
             var = match.group(1)
             env_val = os.environ.get(var)
             if env_val is not None:
-                logger.info(f"[REPLAY] Replacing placeholder ${{{var}}} with env value.")
+                logger.info(
+                    f"[REPLAY] Replacing placeholder ${{{var}}} with env value."
+                )
                 return env_val
-            logger.warning(f"[REPLAY] No env value found for ${{{var}}}, leaving as is.")
+            logger.warning(
+                f"[REPLAY] No env value found for ${{{var}}}, leaving as is."
+            )
             return match.group(0)
+
         return re.sub(r"\$\{(\w+)\}", repl, val)
 
     for idx, action in enumerate(actions):
         try:
             logger.info(f"[REPLAY] -------- Action {idx} --------")
             logger.info(f"[REPLAY] Raw action: {action}")
-            if not isinstance(action, dict) or 'type' not in action or 'args' not in action:
+            if (
+                not isinstance(action, dict)
+                or "type" not in action
+                or "args" not in action
+            ):
                 logger.error(f"Malformed action at index {idx}: {action}")
                 return f"Error: Malformed action at index {idx}: {action}"
-            action_type = action['type']
-            args = action['args']
+            action_type = action["type"]
+            args = action["args"]
             resolved_args = {k: resolve_placeholders(v) for k, v in args.items()}
             logger.info(f"[REPLAY] Args after placeholder resolution: {resolved_args}")
-            if action_type == 'navigate':
-                url = resolved_args.get('url')
+            if action_type == "navigate":
+                url = resolved_args.get("url")
                 logger.info(f"[REPLAY] Navigating to {url}")
                 await page.goto(url)
                 logger.info(f"[REPLAY] Navigated to {url}")
-            elif action_type == 'click':
-                selector = resolved_args.get('selector')
+            elif action_type == "click":
+                selector = resolved_args.get("selector")
                 logger.info(f"[REPLAY] Clicking selector: {selector}")
                 await page.click(selector)
                 logger.info(f"[REPLAY] Clicked {selector}")
-            elif action_type == 'fill':
-                selector = resolved_args.get('selector')
-                value = resolved_args.get('text')
-                logger.info(f"[REPLAY] Filling selector: {selector} with value: {value}")
+            elif action_type == "fill":
+                selector = resolved_args.get("selector")
+                value = resolved_args.get("text")
+                logger.info(
+                    f"[REPLAY] Filling selector: {selector} with value: {value}"
+                )
                 await page.fill(selector, value)
                 logger.info(f"[REPLAY] Filled {selector} with {value}")
             else:
@@ -211,8 +242,10 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
             logger.error(f"[REPLAY] Exception on action {idx}: {action}")
             logger.error(f"[REPLAY] Exception: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return f"Error: Failed on action {idx}: {action} - {e}"
-    logger.info(f"[REPLAY] Successfully replayed {len(actions)} actions from {action_json_path}")
+    logger.info(
+        f"[REPLAY] Successfully replayed {len(actions)} actions from {action_json_path}"
+    )
     return f"Successfully replayed {len(actions)} actions from {action_json_path}"
-

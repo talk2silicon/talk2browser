@@ -4,11 +4,13 @@ from .dom.service import DOMService
 
 logger = logging.getLogger(__name__)
 
+
 class BrowserPage:
     """
     Encapsulates a Playwright page and its associated DOMService.
     Each browser tab/window/popup should have its own BrowserPage instance.
     """
+
     def __init__(self, page: Page):
         self.page = page
         self.dom_service = DOMService(page)

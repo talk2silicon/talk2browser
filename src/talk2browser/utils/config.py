@@ -5,6 +5,7 @@ import logging
 
 _config = None
 
+
 def get_t2b_config():
     global _config
     if _config is not None:
@@ -17,6 +18,7 @@ def get_t2b_config():
         _config = {}
     return _config
 
+
 def is_vision_enabled():
     # Environment variable takes precedence
     env_val = os.getenv("VISION_ENABLED")
@@ -24,14 +26,21 @@ def is_vision_enabled():
         try:
             val = env_val.lower()
             enabled = val in ("1", "true", "yes", "on")
-            logging.getLogger(__name__).info(f"[config] VISION_ENABLED from env: {env_val} -> {enabled}")
+            logging.getLogger(__name__).info(
+                f"[config] VISION_ENABLED from env: {env_val} -> {enabled}"
+            )
             return enabled
         except Exception as e:
-            logging.getLogger(__name__).warning(f"[config] Error parsing VISION_ENABLED env: {e}")
+            logging.getLogger(__name__).warning(
+                f"[config] Error parsing VISION_ENABLED env: {e}"
+            )
     # Fall back to pyproject.toml
     enabled = bool(get_t2b_config().get("vision_enabled", False))
-    logging.getLogger(__name__).info(f"[config] VISION_ENABLED from pyproject.toml: {enabled}")
+    logging.getLogger(__name__).info(
+        f"[config] VISION_ENABLED from pyproject.toml: {enabled}"
+    )
     return enabled
+
 
 def get_vision_model_path():
     return get_t2b_config().get("vision_model_path", "./models/yolo11s.pt")
