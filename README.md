@@ -28,21 +28,143 @@ A self-improving browser automation system powered by LLMs, Playwright, and modu
 
 ## 🛠️ Installation
 
-1. **Python 3.10+ required.**
-2. **Install Playwright browsers (optional, only if you want browser automation or script generation):**
+### Prerequisites
+- **Python 3.10+** (required)
+- **Git** (for cloning the repository)
+- **Anthropic API Key** (for LLM functionality)
+
+### Step 1: Environment Setup
+
+**Create a virtual environment (recommended):**
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
+```
+
+### Step 2: Clone and Install
+
+```bash
+# Clone the repository
+git clone https://github.com/talk2silicon/talk2browser.git
+cd talk2browser
+
+# Install Playwright browsers (required for browser automation)
+playwright install
+
+# Install the package in development mode
+pip install -e .[dev]
+```
+
+### Step 3: API Key Setup
+
+1. **Get your Anthropic API Key:**
+   - Visit [Anthropic Console](https://console.anthropic.com/)
+   - Sign up or log in to your account
+   - Navigate to "API Keys" section
+   - Create a new API key with appropriate permissions
+   - Copy the key (starts with `sk-ant-`)
+
+2. **Configure environment variables:**
    ```bash
-   playwright install
-   ```
-   > **Note:** Playwright is only required if you want to use browser automation or script generation features. If you only want to use the agent for non-browser tasks, you do not need to install Playwright or its browsers.
-3. **Install the package in development mode:**
-   ```bash
-   pip install -e .[dev]
-   ```
-4. **Copy and configure your environment variables:**
-   ```bash
+   # Copy the example environment file
    cp .env.example .env
-   # Edit .env and add your ANTHROPIC_API_KEY and other secrets
+   
+   # Edit .env file and add your API key
+   # Replace YOUR_API_KEY_HERE with your actual key
+   ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
    ```
+
+### Step 4: Verify Installation
+
+Test your setup with a simple example:
+
+```bash
+# Run the GitHub trending example
+python examples/test_agent.py --task github_trending
+```
+
+**Expected output:**
+- Browser window opens
+- Navigates to GitHub trending page
+- Extracts repository information
+- Generates a PDF report
+- Creates a Playwright script
+
+If successful, you'll see files like:
+- `trending_now_report.pdf`
+- `github_trending_script.py`
+
+### Alternative LLM Setup
+
+While Anthropic Claude is the default, you can use other LLMs:
+
+**OpenAI GPT:**
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(model="gpt-4", api_key="your-openai-key")
+```
+
+**Local LLMs (Ollama):**
+```python
+from langchain_ollama import ChatOllama
+
+llm = ChatOllama(model="llama2")
+```
+
+Add the corresponding API keys to your `.env` file:
+```bash
+OPENAI_API_KEY=your-openai-key
+# No key needed for local Ollama
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**1. "No module named 'playwright'"**
+```bash
+# Install Playwright browsers
+playwright install
+```
+
+**2. "Anthropic API key not found"**
+- Check your `.env` file exists and contains `ANTHROPIC_API_KEY`
+- Verify the key starts with `sk-ant-`
+- Ensure `.env` is in the project root directory
+
+**3. "Browser launch failed"**
+```bash
+# Reinstall Playwright browsers
+playwright install --force
+```
+
+**4. "Permission denied" on macOS/Linux**
+```bash
+# Make sure you're in the virtual environment
+source venv/bin/activate
+# Try with --user flag if needed
+pip install --user -e .[dev]
+```
+
+**5. PDF generation fails**
+- Ensure you have sufficient disk space
+- Check write permissions in the project directory
+- Verify Playwright browsers are installed
+
+### Getting Help
+
+- **Issues**: [GitHub Issues](https://github.com/talk2silicon/talk2browser/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/talk2silicon/talk2browser/discussions)
+- **Website**: [talk2browser.com](http://www.talk2browser.com)
 
 ---
 
