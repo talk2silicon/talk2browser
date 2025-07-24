@@ -100,30 +100,6 @@ If successful, you'll see files like:
 - `trending_now_report.pdf`
 - `github_trending_script.py`
 
-### Alternative LLM Setup
-
-While Anthropic Claude is the default, you can use other LLMs:
-
-**OpenAI GPT:**
-```python
-from langchain_openai import ChatOpenAI
-
-llm = ChatOpenAI(model="gpt-4", api_key="your-openai-key")
-```
-
-**Local LLMs (Ollama):**
-```python
-from langchain_ollama import ChatOllama
-
-llm = ChatOllama(model="llama2")
-```
-
-Add the corresponding API keys to your `.env` file:
-```bash
-OPENAI_API_KEY=your-openai-key
-# No key needed for local Ollama
-```
-
 ---
 
 ## 🔧 Troubleshooting
