@@ -157,19 +157,25 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
                 f"Could not load buildDomTree.js from {script_path}"
             ) from e
 
-    async def get_interactive_elements(self, highlight: bool = False) -> List[DOMElement]:
+    async def get_interactive_elements(
+        self, highlight: bool = False
+    ) -> List[DOMElement]:
         """Get all interactive elements on the page with their hashes using buildDomTree.js.
         Args:
             highlight: Whether to highlight the elements
         Returns:
             List of interactive DOMElement objects
         """
-        logger.info('Scanning page for interactive elements...')
+        logger.info("Scanning page for interactive elements...")
         try:
-            current_url = self.page.url if isinstance(self.page.url, str) else await self.page.url
+            current_url = (
+                self.page.url if isinstance(self.page.url, str) else await self.page.url
+            )
             if self._last_page_url != current_url:
                 self._element_history_map.clear()
-                logger.debug(f"Page reload detected (old: {self._last_page_url}, new: {current_url}), cleared element history map.")
+                logger.debug(
+                    f"Page reload detected (old: {self._last_page_url}, new: {current_url}), cleared element history map."
+                )
             self._last_page_url = current_url
 
             # Reset state
@@ -178,27 +184,29 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
 
             # Get DOM tree using buildDomTree.js
             dom_tree = await self.get_dom_tree(highlight_elements=highlight)
-            if not dom_tree or 'map' not in dom_tree:
-                logger.error('Invalid DOM tree response')
+            if not dom_tree or "map" not in dom_tree:
+                logger.error("Invalid DOM tree response")
                 return []
 
             # Process interactive elements from DOM tree
-            for elem_id, elem_data in dom_tree['map'].items():
-                if elem_data.get('isInteractive'):
+            for elem_id, elem_data in dom_tree["map"].items():
+                if elem_data.get("isInteractive"):
                     element = DOMElement(
-                        tag_name=elem_data.get('tagName', '').lower(),
-                        text=elem_data.get('text', '').strip(),
-                        xpath=elem_data.get('xpath', ''),
-                        attributes=elem_data.get('attributes', {}),
-                        is_visible=elem_data.get('isVisible', False),
+                        tag_name=elem_data.get("tagName", "").lower(),
+                        text=elem_data.get("text", "").strip(),
+                        xpath=elem_data.get("xpath", ""),
+                        attributes=elem_data.get("attributes", {}),
+                        is_visible=elem_data.get("isVisible", False),
                         is_interactive=True,
-                        is_in_viewport=elem_data.get('isInViewport', False),
-                        bounds=elem_data.get('bounds'),
-                        highlight_index=elem_data.get('highlightIndex'),
+                        is_in_viewport=elem_data.get("isInViewport", False),
+                        bounds=elem_data.get("bounds"),
+                        highlight_index=elem_data.get("highlightIndex"),
                     )
                     # Add element with # prefix hash
                     element_hash = f"#{element.element_hash}"
-                    logger.debug(f"Found interactive {element.tag_name}: {element_hash}")
+                    logger.debug(
+                        f"Found interactive {element.tag_name}: {element_hash}"
+                    )
                     # Store xpath in element map
                     self._element_map[element_hash] = element.xpath
                     self._interactive_elements.append(element)

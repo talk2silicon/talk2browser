@@ -10,7 +10,12 @@ import logging
 
 from typing import Annotated, Sequence, TypedDict, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -668,9 +673,7 @@ class BrowserAgent:
             logger.info("Agent task completed")
             # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
-                ActionService.get_instance().save_merged_actions_with_prompt(
-                    task
-                )
+                ActionService.get_instance().save_merged_actions_with_prompt(task)
             except Exception as final_exc:
                 logger.error(f"Failed to save merged actions: {final_exc}")
             return response

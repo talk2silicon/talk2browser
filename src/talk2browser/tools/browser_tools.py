@@ -180,6 +180,7 @@ def resolve_hash_args(tool_func):
 # No global page reference; use BrowserPage abstraction moving forward.
 # _page: Optional[Page] = None
 
+
 @tool
 @resolve_hash_args
 async def is_enabled(selector: str, **kwargs) -> bool:
@@ -1032,6 +1033,7 @@ async def list_interactive_elements() -> str:
 
 # --- LLM Tool: List Suggestions for Dropdown/Autocomplete ---
 
+
 @langchain_tool
 @resolve_hash_args
 async def list_suggestions(
@@ -1581,6 +1583,7 @@ async def extract_structured_data(
 
             def markdownify_func(html):
                 return markdownify.markdownify(html, strip=strip)
+
             content = None
             try:
                 md_start = time.time()
@@ -1666,7 +1669,7 @@ async def extract_structured_data(
                 cleaned_content = (
                     cleaned_content[: max_chars // 2]
                     + "\n... left out the middle because it was too long ...\n"
-                    + cleaned_content[-max_chars // 2:]
+                    + cleaned_content[-max_chars // 2 :]
                 )
                 logger.info(
                     f"[extract_structured_data] After truncation, content length: {len(cleaned_content)} characters"
