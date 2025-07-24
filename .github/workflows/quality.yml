@@ -20,15 +20,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev]
           pip install black flake8 mypy pytest
-#      - name: Lint with flake8
-#        run: |
-#          flake8 src/ tests/
-#      - name: Check formatting with black
-#        run: |
-#          black --check src/ tests/
-#      - name: Type check with mypy
-#        run: |
-#          mypy src/
-#      - name: Run tests
-#        run: |
-#          pytest
+      - name: Lint with flake8
+        run: |
+          flake8 src/ tests/
+      - name: Check formatting with black
+        run: |
+          black --check src/ tests/
+      - name: Type check with mypy
+        run: |
+          mypy src/
+      - name: Run tests
+        run: |
+          pytest
