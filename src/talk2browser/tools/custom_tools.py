@@ -8,6 +8,10 @@ from ..browser.page_manager import PageManager
 async def set_code_in_editor(selector: str, code: str) -> str:
     """
     Set code in a web-based code editor (Ace, Monaco, CodeMirror, etc.).
+
+    WARNING: Only use this tool for selectors that target rich code editors (e.g., '.ace_editor', '.monaco-editor', '.CodeMirror').
+    DO NOT use this tool for standard HTML input fields or forms. For plain text fields, use the 'fill' tool instead.
+
     Args:
         selector: CSS selector for the editor container (e.g., '.ace_editor', '.monaco-editor', etc.)
         code: The code string to inject into the editor.

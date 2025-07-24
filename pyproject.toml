@@ -4,6 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "talk2browser"
+
+[tool.poetry.dependencies]
+markdown = "^3.4.4"
 version = "0.1.0"
 description = "A self-improving browser automation tool"
 readme = "README.md"
@@ -21,6 +24,8 @@ dependencies = [
     "scikit-learn>=1.0.0",
     "sentence-transformers>=2.2.2",
     "pip",
+    "markdownify",
+    "PyPDF2",
     # Add ultralytics if used
 ]
 

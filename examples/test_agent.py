@@ -42,16 +42,9 @@ TASKS = {
     "filedata": "Navigate to https://www.saucedemo.com and login using the test data in ./data/login_data.json",
     "github_trending": (
         "Go to https://github.com/trending. "
-        "Extract information about the top 10 trending repositories including: "
-        "- Repository name "
-        "- Owner/organization "
-        "- Description "
-        "- Primary programming language "
-        "- Number of stars "
-        "- Number of forks "
-        "- URL to the repository "
+        "Extract information about the repositories"
         "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
-        "Finally generate a Playwright python script that automates this entire process."
+        
     ),
     "tiktok_trending": (
         "Go to https://www.tiktok.com/channel/trending-now?lang=en. "
@@ -62,7 +55,7 @@ TASKS = {
         "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
     ),
     "amazon_bose": (
-        "Go to https://www.amazon.com.au. "
+        "Go to https://www.amazon.com.au"
         "Search for 'Bose Smart Ultra Soundbar'. "
         "Create a comprehensive PDF report with all the extracted information, "
         "formatted in a clean and readable way with proper headings and sections. "

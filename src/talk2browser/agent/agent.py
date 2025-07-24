@@ -30,9 +30,9 @@ from ..browser.dom.service import DOMService
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
-    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html, 
+    navigate, click, fill, list_suggestions, generate_pdf_from_html, 
     generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
-    load_test_data, set_code_in_editor, save_json
+    load_test_data, set_code_in_editor, save_json, extract_structured_data
 )
 from ..tools.script_tools import load_test_data
 from ..services.action_service import ActionService  # Ensure this is at the top
@@ -52,7 +52,7 @@ TOOLS = [
     navigate,
     click,
     fill,
-    get_count,
+    # get_count,  # Temporarily removed for impact assessment
     list_suggestions,
     generate_pdf_from_html,
     generate_script,
@@ -60,8 +60,9 @@ TOOLS = [
     replay_action_json_with_playwright,
     list_files_in_folder,
     load_test_data,
-    set_code_in_editor,
-    save_json  # <-- Added save_json tool for LLM
+    # set_code_in_editor,
+    save_json,  # <-- Added save_json tool for LLM
+    extract_structured_data
 ]
 logger.debug(f"[Agent] TOOLS after registration: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
 #logger.info(f"[Agent] TOOLS registered: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
