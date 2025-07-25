@@ -1,28 +1,54 @@
-<div align="center">
-  <img src="assets/logo.svg" alt="Talk2Browser Logo" height="100" />
-  
-  <br/>
-  <a href="http://www.talk2browser.com" target="_blank"><b>Visit the website &rarr; talk2browser.com</b></a>
-</div>
+# 🧠 talk2browser – Browser automation with everyday Language (Powered by LangGraph)
 
-# Talk2Browser
-
-[![Watch the demo on YouTube](assets/talk2browser.png)](https://youtu.be/mOcW7bFahdk)
-> Click the image to watch the full demo video on YouTube.
+Ever wanted to automate real browser actions just by **describing** what you want? Meet **talk2browser**, a LangGraph-powered agent that turns prompts into real-time web actions and reusable test scripts.
 
 A self-improving browser automation system powered by LLMs, Playwright, and modular agent services. Generate, record, and replay test scripts using natural language and advanced automation tools.
 
 ---
 
-## 🚀 Features
+## ✨ Key Features
 
-- **Natural Language Browser Automation**: Control and test web apps using plain English.
-- **Script Generation**: Generate Playwright, Cypress, and Selenium scripts from recorded actions.
-- **Modular Tool Architecture**: Easily extend with new browser or script tools.
-- **Vision Integration**: (Optional) YOLOv11-based UI element detection and metadata extraction.
-- **Sensitive Data Handling**: Manage secrets securely via environment variables or `.env`.
-- **LangGraph Workflows**: Flexible orchestration for complex browser tasks.
-- **Extensible**: Add new tools, LLMs, or workflows as Python modules.
+| Feature | Description |
+|---------|-------------|
+| 🗣️ **Natural Language Control** | Plain English commands for web app testing and automation |
+| 📝 **Multi-Framework Scripts** | Auto-generates Playwright, Cypress, and Selenium code from recorded actions |
+| 👁️ **Vision Integration** | YOLOv11-based UI element detection with bounding box coordinates (optional, requires model file) |
+| 🔐 **Secure Data Handling** | Environment-based credential management with SecretStr support |
+| 📊 **PDF Report Generation** | Comprehensive documentation output with screenshots and structured data |
+| ♻️ **Repeatable Execution** | JSON action recording for consistent replay across unlimited runs |
+| 🎯 **Element Detection** | Smart CSS/XPath selector resolution with hash-based element mapping |
+| 🔧 **Quality Assurance** | Full mypy, flake8, black compliance with automated CI/CD pipeline |
+
+---
+
+## 🔗 LangGraph Implementation
+
+**talk2browser** showcases advanced LangGraph patterns:
+
+- **Agent State Management** — Complex browser workflows with conditional transitions using `AgentState` TypedDict
+- **Dynamic Tool Registration** — 25+ browser automation tools automatically registered as LangGraph tools via decorators
+- **Multi-Step Orchestration** — Planning → Execution → Script Generation phases with state persistence
+- **Self-Improving Workflows** — Action recording and replay capabilities for iterative improvement
+- **Vision Integration** — YOLOv11-based UI element detection with LLM context injection
+- **Sensitive Data Handling** — Secure credential management with environment variable injection
+
+```python
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], add_messages]
+    next: str  # For LangGraph routing
+    element_map: Dict[str, str]  # Element hash to xpath mapping
+    vision: dict  # Optional vision metadata for LLM context
+
+# Agent workflow: chatbot -> tools -> chatbot (or END)
+graph = StateGraph(AgentState)
+graph.add_node("agent", self._chatbot)
+graph.add_node("tools", ToolNode(TOOLS))
+graph.add_conditional_edges("agent", self._route_tools)
+```
+
+The agent maintains context across browser sessions and learns from previous automation patterns through the `ActionService` which records all tool calls with execution time, arguments, results, and errors.
+
+> **Note**: The system includes 25+ registered tools including navigation, clicking, form filling, screenshot capture, PDF generation, and script creation capabilities.
 
 ---
 
@@ -104,6 +130,33 @@ python examples/test_agent.py --task github_trending
 If successful, you'll see files like:
 - `trending_now_report.pdf`
 - `github_trending_script.py`
+
+---
+
+## ⚠️ What to Watch Out For
+
+- **Vision/YOLOv11 Integration:** Optional feature. Requires a YOLOv11 model file and additional setup. Not required for core browser automation.
+- **Script Summarization:** (Planned) Feature for AI-powered summaries of generated automation scripts is on the roadmap but not yet implemented.
+- **PDF Generation:** Fully supported. Generates comprehensive PDF reports with execution details and screenshots.
+- **Manual Action Override:** Partially implemented. Human-in-the-loop/manual override is available for some actions and is being actively enhanced for broader coverage.
+
+## 🔮 Future Roadmap
+
+- **PDF Script Documentation** — Generate comprehensive PDF reports for generated test scripts with execution details and screenshots
+- **Script Summarization** — AI-powered summaries of generated automation scripts with key actions and validation points
+- **Enhanced Manual Action Override** — Improved human-in-the-loop capabilities for manual intervention during automation
+- **Performance Optimization** — Faster element detection and action execution
+- **Error Handling** — Better recovery from browser automation failures
+- **Test Coverage** — Expanded unit and integration test suite
+
+## 🛠️ Technical Stack
+
+- **LangGraph**: Agent orchestration and state management
+- **Playwright**: Browser automation engine with 25+ registered tools
+- **Claude 3 Opus/Haiku**: Natural language reasoning and planning
+- **YOLOv11**: Computer vision for UI element detection
+- **Python 3.10+**: Core implementation with full type safety
+- **Pydantic**: Data validation and settings management
 
 ---
 

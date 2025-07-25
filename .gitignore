@@ -34,7 +34,6 @@ test-results/
 *.screenshot.png
 *.screenshot.jpg
 generated/
-github_discussions_post.md
 
 # C extensions
 *.so
