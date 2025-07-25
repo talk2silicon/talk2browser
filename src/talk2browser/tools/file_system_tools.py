@@ -1,4 +1,5 @@
 import os
+import io
 import logging
 from typing import Optional, List
 from langchain_core.tools import tool
@@ -6,7 +7,7 @@ from langchain_core.tools import tool
 logger = logging.getLogger(__name__)
 
 
-def save_json_to_file(path: str, data) -> None:
+def save_json_to_file(path: str, data: object) -> None:
     """
     Save data as JSON to the given file path, creating parent directories if needed.
     Args:
@@ -38,8 +39,8 @@ def save_text_to_file(path: str, text: str) -> None:
 
 
 def compress_image_to_size_limit(
-    path, max_size=4.5 * 1024 * 1024, min_quality=15, resize_factor=0.75
-):
+    path: str, max_size: float = 4.5 * 1024 * 1024, min_quality: int = 15, resize_factor: float = 0.75
+) -> "io.BytesIO":
     """
     Compress an image to ensure it is below the specified size limit (in bytes).
     Returns a BytesIO object with the compressed image data.
@@ -66,7 +67,7 @@ def compress_image_to_size_limit(
             while compressed_img.tell() > max_size and resize_factor_current > 0.3:
                 new_width = int(width * resize_factor_current)
                 new_height = int(height * resize_factor_current)
-                resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
                 logger.debug(
                     f"[FileSystemTools] Resizing image to {new_width}x{new_height} to meet size limit"
                 )

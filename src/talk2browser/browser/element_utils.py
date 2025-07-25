@@ -70,7 +70,7 @@ async def find_interactive_elements(
     logger = logging.getLogger(__name__)
 
     # Find all matching elements
-    elements = []
+    elements: list[dict[str, Any]] = []
     for selector in selectors:
         if len(elements) >= max_elements:
             break
@@ -155,7 +155,7 @@ async def _get_element_properties(
         value = await handle.get_attribute("value") or ""
 
         # Get bounding box for coordinates
-        box = await handle.bounding_box() or {}
+        box: Any = await handle.bounding_box() or {}
 
         # Create element dictionary
         element = {

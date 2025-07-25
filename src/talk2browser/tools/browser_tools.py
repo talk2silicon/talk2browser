@@ -1,6 +1,6 @@
 """Browser automation tools using Playwright."""
 
-from typing import Optional
+from typing import Optional, Literal
 from langchain.tools import tool
 import logging
 from ..services.action_service import ActionService
@@ -12,7 +12,9 @@ import functools
 
 
 # --- Selector Normalization Utility ---
-def normalize_selector(selector: str, logger=None) -> str:
+from typing import Any
+
+def normalize_selector(selector: str, logger: Any = None) -> str:
     """
     Normalize selectors for Playwright compatibility:
     1. Convert jQuery-style :contains("text") selectors to Playwright text selectors
@@ -58,7 +60,7 @@ def normalize_selector(selector: str, logger=None) -> str:
 
 # --- Centralized Screenshot Utility for User Actions ---
 async def capture_screenshot_for_action(
-    page, tool_name: str, logger, success=True
+    page: Any, tool_name: str, logger: Any, success: bool = True
 ) -> Optional[str]:
     """
     Capture a screenshot for user actions, save it with a consistent name, and return the path.
@@ -97,13 +99,13 @@ async def capture_screenshot_for_action(
         return None
 
 
-def resolve_secret_args(tool_func):
+def resolve_secret_args(tool_func: Any) -> Any:
     import functools
     from ..utils.secret_resolver import resolve_secret_placeholders
     import logging
 
     @functools.wraps(tool_func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         logger = logging.getLogger(__name__)
         # Remove sensitive_data from kwargs if present
         kwargs.pop("sensitive_data", None)
@@ -136,9 +138,9 @@ def resolve_secret_args(tool_func):
     return wrapper
 
 
-def resolve_hash_args(tool_func):
+def resolve_hash_args(tool_func: Any) -> Any:
     @functools.wraps(tool_func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         logger = logging.getLogger(__name__)
         selector = kwargs.get("selector")
         from ..browser.page_manager import PageManager
@@ -173,7 +175,6 @@ def resolve_hash_args(tool_func):
             )
         return await tool_func(*args, **kwargs)
 
-    wrapper._is_browser_tool = True
     return wrapper
 
 
@@ -183,7 +184,7 @@ def resolve_hash_args(tool_func):
 
 @tool
 @resolve_hash_args
-async def is_enabled(selector: str, **kwargs) -> bool:
+async def is_enabled(selector: str, **kwargs: Any) -> bool:
     """Check if an element is enabled (not disabled) on the current browser page.
     Args:
         selector: CSS selector
@@ -240,7 +241,7 @@ async def is_enabled(selector: str, **kwargs) -> bool:
 
 @tool
 @resolve_hash_args
-async def resolve_selector(selector, dom_service, logger):
+async def resolve_selector(selector: str, dom_service: Any, logger: Any) -> Optional[str]:
     """
     Resolves a hash selector to an XPath selector using DOMService if needed.
     Returns a valid Playwright selector (xpath=...), or the original if not a hash.
@@ -266,12 +267,45 @@ async def resolve_selector(selector, dom_service, logger):
 
 @tool
 @resolve_hash_args
-async def get_count(selector: str, **kwargs) -> int:
+async def get_logger() -> Any:
+    """Return the logger instance."""
+    return logging.getLogger(__name__)
+
+
+@tool
+@resolve_hash_args
+async def get_page_manager() -> Any:
+    """Return the PageManager instance."""
+    from ..browser.page_manager import PageManager
+    return PageManager.get_instance()
+
+
+@tool
+@resolve_hash_args
+async def get_current_page() -> Any:
+    """Return the current browser page."""
+    from ..browser.page_manager import PageManager
+    return PageManager.get_instance().get_current_page()
+
+
+@tool
+@resolve_hash_args
+async def get_dom_service() -> Any:
+    """Return the DOMService instance."""
+    from ..browser.page_manager import PageManager
+    browser_page = PageManager.get_instance().get_current_page()
+    return browser_page.get_dom_service() if browser_page else None
+
+
+@tool
+@resolve_hash_args
+async def get_count(selector: str, **kwargs: Any) -> int:
     """Return the number of elements matching the selector on the current browser page.
     Args:
         selector: CSS selector
     Returns:
         int: Number of elements found
+{{ ... }}
     """
     import logging
 
@@ -364,7 +398,7 @@ async def navigate(url: str) -> str:
 
 @tool
 @resolve_hash_args
-async def click(selector: str, *, timeout: int = 5000, element_map: dict = None) -> str:
+async def click(selector: str, *, timeout: int = 5000, element_map: Optional[dict] = None) -> str:
     """Click on an element matching the CSS selector on the current browser page.
     Args:
         selector: CSS selector of the element to click
@@ -499,7 +533,7 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
 @tool
 @resolve_secret_args
 @resolve_hash_args
-async def fill(selector: str, text: str, **kwargs) -> str:
+async def fill(selector: str, text: str, **kwargs: Any) -> str:
     """
     Fill a form field with the specified text on the current browser page.
 
@@ -660,7 +694,7 @@ async def fill(selector: str, text: str, **kwargs) -> str:
 
 @tool
 @resolve_hash_args
-async def type(selector: str, text: str, **kwargs) -> str:
+async def type(selector: str, text: str, **kwargs: Any) -> str:
     """Type text into an element, simulating key events (unlike fill)."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -728,7 +762,7 @@ async def type(selector: str, text: str, **kwargs) -> str:
 
 @tool
 @resolve_hash_args
-async def check(selector: str, **kwargs) -> str:
+async def check(selector: str, **kwargs: Any) -> str:
     """Check a checkbox or radio button."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -775,7 +809,7 @@ async def check(selector: str, **kwargs) -> str:
 
 @tool
 @resolve_hash_args
-async def uncheck(selector: str, **kwargs) -> str:
+async def uncheck(selector: str, **kwargs: Any) -> str:
     """Uncheck a checkbox."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -822,7 +856,7 @@ async def uncheck(selector: str, **kwargs) -> str:
 
 @tool
 @resolve_hash_args
-async def select_option(selector: str, value: str, **kwargs) -> str:
+async def select_option(selector: str, value: str, **kwargs: Any) -> str:
     """Select an option in a <select> element."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -876,7 +910,7 @@ async def select_option(selector: str, value: str, **kwargs) -> str:
 
 @tool
 @resolve_hash_args
-async def hover(selector: str, **kwargs) -> str:
+async def hover(selector: str, **kwargs: Any) -> str:
     """Hover over an element."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -921,8 +955,12 @@ async def hover(selector: str, **kwargs) -> str:
 
 @tool
 @resolve_hash_args
+
 async def wait_for_selector(
-    selector: str, state: str = "visible", timeout: int = 5000, **kwargs
+    selector: str,
+    state: Optional[Literal['attached', 'detached', 'hidden', 'visible']] = 'visible',
+    timeout: int = 5000,
+    **kwargs: Any
 ) -> str:
     """Wait for a selector to reach a certain state (visible, attached, detached, hidden)."""
     logger = logging.getLogger(__name__)
@@ -975,7 +1013,7 @@ async def wait_for_selector(
 
 
 @tool
-async def screenshot(selector: str = None, path: str = None, **kwargs) -> str:
+async def screenshot(selector: Optional[str] = None, path: Optional[str] = None, **kwargs: Any) -> str:
     """Take a screenshot of the current page or a specific element. If selector is None, capture the full page."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -1027,7 +1065,7 @@ async def screenshot(selector: str = None, path: str = None, **kwargs) -> str:
 # Not an LLM tool. Used internally by DOM service.
 async def list_interactive_elements() -> str:
     """List interactive elements on the page. (Internal service, not an LLM tool.)"""
-    pass
+    return ""
 
 
 # --- LLM Tool: List Suggestions for Dropdown/Autocomplete ---
@@ -1036,12 +1074,13 @@ async def list_interactive_elements() -> str:
 @langchain_tool
 @resolve_hash_args
 async def list_suggestions(
-    container_selector: str, option_selector: str = None, **kwargs
+    container_selector: str, option_selector: Optional[str] = None, **kwargs: object
 ) -> str:
     """
     List all options from a dropdown (<select>) element specified by selector.
     Args:
-        selector: CSS or XPath selector for the <select> element.
+        container_selector: CSS or XPath selector for the <select> element.
+        option_selector: Optional CSS or XPath selector for <option> elements (default: None)
     Returns:
         JSON list of {label, value, index} for each <option>.
     """
@@ -1157,7 +1196,7 @@ async def list_suggestions(
 
 # --- LLM Tool: Generate PDF from HTML ---
 @tool
-def generate_pdf_from_html(html: str, path: str = None, options: dict = None) -> str:
+def generate_pdf_from_html(html: str, path: Optional[str] = None, options: Optional[dict] = None) -> str:
     """
     Generate a high-quality PDF from HTML content using Playwright with enhanced formatting.
 
@@ -1357,7 +1396,7 @@ def generate_pdf_from_html(html: str, path: str = None, options: dict = None) ->
             )
         return html_content
 
-    async def _generate():
+    async def _generate() -> str:
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
@@ -1430,13 +1469,14 @@ def generate_pdf_from_html(html: str, path: str = None, options: dict = None) ->
                         from PyPDF2 import PdfReader, PdfWriter  # type: ignore
                         from fpdf import FPDF
                         from PIL import Image
+                        from PyPDF2._page import PageObject
 
                         temp_pdf_paths = []
                         writer = PdfWriter()
                         reader = PdfReader(output_path)
                         # Add original PDF pages
                         for page in reader.pages:
-                            writer.add_page(page)
+                            writer.add_page(page)  # type: ignore[arg-type]
                         # Create a PDF for each screenshot and append
                         for idx, img_path in enumerate(screenshot_paths):
                             if not os.path.exists(img_path):
@@ -1464,7 +1504,7 @@ def generate_pdf_from_html(html: str, path: str = None, options: dict = None) ->
                         for temp_pdf in temp_pdf_paths:
                             img_reader = PdfReader(temp_pdf)
                             for page in img_reader.pages:
-                                writer.add_page(page)
+                                writer.add_page(page)  # type: ignore[arg-type]
                             logger.info(
                                 f"[generate_pdf_from_html] Appending screenshot PDF: {temp_pdf}"
                             )
@@ -1512,13 +1552,13 @@ def generate_pdf_from_html(html: str, path: str = None, options: dict = None) ->
             raise
 
     # Execute the async function and return the result
-    return asyncio.run(_generate())
+    return str(asyncio.run(_generate()))
 
 
 @tool
 async def extract_structured_data(
-    extract_links: bool = False, include_hidden: bool = False, **kwargs
-):
+    extract_links: bool = False, include_hidden: bool = False, **kwargs: Any
+) -> str:
     """
     Extract the current web page as markdown for structured data extraction by LLMs.
     Optimized for large/slow pages: longer timeouts, partial results on timeout, and diagnostic logging.
@@ -1580,16 +1620,18 @@ async def extract_structured_data(
 
             page_html = page_html_result
 
-            def markdownify_func(html):
-                return markdownify.markdownify(html, strip=strip)
+            def markdownify_func(html: str) -> str:
+                return str(markdownify.markdownify(html, strip=strip))
 
-            content = None
+            content: str = ""
             try:
                 md_start = time.time()
                 content = await asyncio.wait_for(
                     loop.run_in_executor(None, markdownify_func, page_html),
                     timeout=30.0,
                 )
+                if not isinstance(content, str):
+                    content = str(content)
                 logger.info(
                     f"[extract_structured_data] Markdownify took {time.time() - md_start:.2f}s"
                 )
@@ -1684,7 +1726,7 @@ async def extract_structured_data(
                 f"[extract_structured_data] Final content preview (last 1000 chars):\n{cleaned_content[-1000:]}"
             )
 
-            ActionService.get_instance().record_action(
+            ActionService.get_instance().record_agent_action(
                 {
                     "type": "extract_structured_data",
                     "args": {
@@ -1698,7 +1740,7 @@ async def extract_structured_data(
             logger.info(
                 f"[extract_structured_data] Successfully returning {len(cleaned_content)} characters of extracted content"
             )
-            return cleaned_content
+            return str(cleaned_content)
         except ImportError:
             logger.warning("markdownify not available, using plain text extraction")
             # Fallback to plain text extraction

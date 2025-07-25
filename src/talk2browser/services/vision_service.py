@@ -11,7 +11,7 @@ class VisionService:
 
     def __init__(self) -> None:
         self._latest_results = None
-        self._latest_image_path = None
+        self._latest_image_path: Optional[str] = None
         self._model_path = get_vision_model_path()
         self._logger = logging.getLogger(__name__)
         self._model = None

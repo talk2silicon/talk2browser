@@ -1,5 +1,6 @@
 import json
-from typing import List, Dict, Any
+import typing
+from typing import List, Dict, Any, Optional
 import logging
 import asyncio
 
@@ -107,7 +108,7 @@ class ActionService:
         )
         self._perform_realtime_merge()
 
-    def record_screenshot(self, screenshot_path: str):
+    def record_screenshot(self, screenshot_path: str) -> None:
         """
         Record a screenshot as an agent action for later use in PDF reports.
         """
@@ -118,7 +119,7 @@ class ActionService:
         logger.info(f"[ActionService] Recorded screenshot: {screenshot_path}")
         self.record_agent_action(action)
 
-    def __init__(self, dom_service=None):
+    def __init__(self, dom_service: typing.Any = None) -> None:
         if ActionService._instance is not None:
             raise RuntimeError(
                 "ActionService is a singleton. Use ActionService.get_instance()."
@@ -135,9 +136,9 @@ class ActionService:
         self._resume_event = asyncio.Event()
         self._resume_event.set()  # Start in agent mode
         self._manual_mode = False
-        self._timeout_task = None
+        self._timeout_task: Optional[asyncio.Task[None]] = None
 
-    async def expose_mode_change_handler(self, page):
+    async def expose_mode_change_handler(self, page: typing.Any) -> None:
         """
         Expose the mode change handler to Playwright JS as notifyPythonOfModeChange.
         """
@@ -146,7 +147,7 @@ class ActionService:
         )
         await page.expose_function("notifyPythonOfModeChange", self.handle_mode_change)
 
-    def handle_mode_change(self, is_manual: bool, page=None, timeout_seconds=120):
+    def handle_mode_change(self, is_manual: bool, page: typing.Any = None, timeout_seconds: int = 120) -> None:
         """
         Called by Playwright/JS when the user toggles manual/agent mode.
         Optionally starts a timeout monitor if entering manual mode.
@@ -168,7 +169,7 @@ class ActionService:
             if self._timeout_task and not self._timeout_task.done():
                 self._timeout_task.cancel()
 
-    async def _manual_mode_timeout_monitor(self, page, timeout_seconds):
+    async def _manual_mode_timeout_monitor(self, page: typing.Any, timeout_seconds: int) -> None:
         try:
             while self._manual_mode:
                 try:
@@ -184,20 +185,24 @@ class ActionService:
         except asyncio.CancelledError:
             logger.info("Manual mode timeout monitor cancelled.")
 
-    async def wait_if_manual_mode(self):
+    async def wait_if_manual_mode(self) -> None:
         if not self._resume_event.is_set():
             logger.info("Agent paused. Waiting for user to finish manual actions...")
             await self._resume_event.wait()
 
     @property
-    def is_manual_mode(self):
+    def is_manual_mode(self) -> bool:
         return self._manual_mode
 
-    async def fetch_manual_actions_from_browser(self, page):
+    async def fetch_manual_actions_from_browser(self, page: typing.Any) -> list[dict[str, Any]]:
+        # page: Playwright.Page (dynamic import)
+        # returns: List[Dict[str, Any]]
         logger.info("Fetching manual actions from browser...")
         actions = await page.evaluate(
             "window.getManualActions && window.getManualActions()"
         )
+        if not actions:
+            actions = []
         logger.debug(
             f"Fetched {len(actions) if actions else 0} manual actions from browser. Recording with ActionService."
         )
@@ -215,19 +220,24 @@ class ActionService:
         else:
             for action in actions or []:
                 self.record_manual_action(action)
+        if not isinstance(actions, list):
+            actions = []
         return actions
 
-    async def save_manual_actions(self, page, output_path):
+    async def save_manual_actions(self, page: typing.Any, output_path: str) -> str:
         await self.fetch_manual_actions_from_browser(page)
         self.save_action_lists(output_path)
         logger.info(f"Manual actions saved to {output_path} via ActionService")
         return output_path
 
-    def _compute_action_key(self, action: Dict[str, Any]) -> str | None:
+    def _compute_action_key(self, action: Dict[str, Any]) -> Optional[str]:
         args = action.get("args", {})
         # Prefer hash if present
         if "hash" in args:
-            return args["hash"]
+            val = args["hash"]
+            if isinstance(val, str):
+                return val
+            return None
         # For non-element actions (like navigate), return None (skip element map checks)
         non_element_actions = {
             "navigate",
@@ -239,11 +249,11 @@ class ActionService:
             return None
         # If no hash for element action, fallback to type:selector for debugging only
         selector = args.get("selector", "")
-        if selector:
+        if isinstance(selector, str) and selector:
             return f"{action.get('type', '')}:{selector}"
         return None
 
-    def _perform_realtime_merge(self):
+    def _perform_realtime_merge(self) -> None:
         if not self.dom_service:
             logger.warning(
                 "DOMService reference not set in ActionService. Merging without DOM context."
@@ -282,7 +292,7 @@ class ActionService:
         logger.info(f"[ActionService] Real-time merged actions: {self._actions}")
 
     @classmethod
-    def get_instance(cls, dom_service=None):
+    def get_instance(cls, dom_service: typing.Any = None) -> "ActionService":
         if cls._instance is None:
             logger.debug("Creating new ActionService singleton instance.")
             cls._instance = ActionService(dom_service=dom_service)
@@ -293,7 +303,7 @@ class ActionService:
                 cls._instance.set_dom_service(dom_service)
         return cls._instance
 
-    def set_dom_service(self, dom_service):
+    def set_dom_service(self, dom_service: typing.Any) -> None:
         logger.info("Setting DOMService reference in ActionService.")
         self.dom_service = dom_service
 
@@ -319,7 +329,7 @@ class ActionService:
         self.manual_actions = actions
         self._perform_realtime_merge()
 
-    def record_manual_actions_list(self, actions: List[Dict[str, Any]]):
+    def record_manual_actions_list(self, actions: List[Dict[str, Any]]) -> None:
         logger.debug(f"Recording {len(actions)} manual actions.")
         self.manual_actions = actions
         self._perform_realtime_merge()
@@ -349,13 +359,13 @@ class ActionService:
 
     # REMOVED: merge_and_store_actions (merging is now real-time and internal)
 
-    def clear(self):
+    def clear(self) -> None:
         logger.debug("Clearing all recorded actions.")
         self.manual_actions = []
         self.agent_actions = []
         self._actions = []
 
-    def save_action_lists(self, path: str):
+    def save_action_lists(self, path: str) -> None:
         logger.debug(f"Saving all action lists to {path} via save_json_to_file")
         from ..tools.file_system_tools import save_json_to_file
 
@@ -394,13 +404,15 @@ class ActionService:
         logger.debug(f"[ActionService] Merged actions saved to {path}")
         return path
 
-    def load_action_lists(self, path: str):
+    def load_action_lists(self, path: str) -> Dict[str, Any]:
         logger.debug(f"Loading action lists from {path}")
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         self.manual_actions = data.get("manual_actions", [])
         self.agent_actions = data.get("agent_actions", [])
         self._actions = data.get("actions", [])
-        return data
+        if isinstance(data, dict):
+            return data
+        return {}
 
     # REMOVED: load_merged_actions (use load_action_lists and access .actions property)

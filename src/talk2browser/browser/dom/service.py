@@ -20,7 +20,7 @@ class DOMElement:
         self,
         tag_name: str,
         xpath: str,
-        attributes: Dict[str, str] = None,
+        attributes: Optional[Dict[str, str]] = None,
         is_visible: bool = False,
         is_interactive: bool = False,
         is_top_element: bool = False,
@@ -45,10 +45,10 @@ class DOMElement:
         self.computed_style = computed_style or {}
         self._element_hash: Optional[str] = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"<DOMElement {self.tag_name} {self.xpath}>"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
     @property
@@ -87,7 +87,23 @@ class DOMElement:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "DOMElement":
+    def from_dict(cls, data: dict) -> "DOMElement":  # type: ignore[return]
+        """Create a DOMElement from a dictionary."""
+        children = [cls.from_dict(child) for child in data.get("children", [])]
+        return cls(
+            tag_name=data.get("tagName", "").lower(),
+            xpath=data.get("xpath", ""),
+            attributes=data.get("attributes", {}),
+            is_visible=data.get("isVisible", False),
+            is_interactive=data.get("isInteractive", False),
+            is_top_element=data.get("isTopElement", False),
+            is_in_viewport=data.get("isInViewport", False),
+            highlight_index=data.get("highlightIndex"),
+            text=data.get("text", ""),
+            bounds=data.get("bounds"),
+            computed_style=data.get("computedStyle", {}),
+            # children=children  # Remove if constructor does not accept children
+        )
         """Create a DOMElement from a dictionary."""
         children = [cls.from_dict(child) for child in data.get("children", [])]
         return cls(
@@ -109,7 +125,7 @@ class DOMElement:
 class DOMService:
     # ... existing methods ...
 
-    async def show_manual_mode_timeout_popup(self):
+    async def show_manual_mode_timeout_popup(self) -> None:
         """
         Injects a popup into the browser to prompt the user to resume agent mode after a manual mode timeout.
         """
@@ -266,7 +282,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
         highlight_elements: bool = False,
         focus_element: int = -1,
         viewport_expansion: int = 0,
-    ) -> Dict:
+    ) -> dict[str, Any]:
         """Get the complete DOM tree with interactive elements highlighted.
 
         Args:
@@ -318,7 +334,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
         }
 
         try:
-            result = await self.page.evaluate(self._build_dom_tree_js, args)
+            result = await self.page.evaluate(str(self._build_dom_tree_js), args)
 
             if not result or not isinstance(result, dict):
                 raise ValueError(f"Invalid DOM tree result: {result}")
@@ -330,7 +346,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
                 "Successfully retrieved DOM tree with %d nodes",
                 len(result.get("map", {})),
             )
-            return result
+            return dict(result) if result else {}
 
         except Exception as e:
             logger.error("Error evaluating buildDomTree.js: %s", e)
@@ -339,7 +355,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
 
         return result
 
-    async def _highlight_elements(self, elements: List[DOMElement]):
+    async def _highlight_elements(self, elements: List[DOMElement]) -> None:
         """Highlight the given elements on the page using the global JS function from buildDomTree.js."""
         import logging
 
@@ -366,7 +382,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
         except Exception as e:
             logger.error(f"Error calling window.highlightElements: {e}", exc_info=True)
 
-    async def clear_highlights(self):
+    async def clear_highlights(self) -> None:
         """Clear any existing element highlights."""
         await self.page.evaluate(
             """
@@ -416,7 +432,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
 
         return best_match
 
-    async def click_element(self, element: DOMElement):
+    async def click_element(self, element: DOMElement) -> bool:
         """Click on the specified element.
 
         Args:
@@ -432,7 +448,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
             logger.error(f"Error clicking element: {e}")
             return False
 
-    async def type_text(self, element: DOMElement, text: str):
+    async def type_text(self, element: DOMElement, text: str) -> bool:
         """Type text into the specified element.
 
         Args:
@@ -484,7 +500,7 @@ box-shadow:0 8px 32px rgba(31,38,135,0.37);text-align:center;font-size:1.1em;">M
             self._element_map.copy()
         )  # Return a copy to prevent external modification
 
-    def resolve_selector_hash(self, hash_val: str) -> str | None:
+    def resolve_selector_hash(self, hash_val: str) -> Optional[str]:
         """
         Resolve a hash value to a selector using the internal element map.
         Args:

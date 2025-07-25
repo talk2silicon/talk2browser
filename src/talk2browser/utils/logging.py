@@ -1,6 +1,7 @@
 """Logging configuration for talk2browser."""
 
 import logging
+from typing import Any
 import sys
 from typing import Optional
 

@@ -12,7 +12,7 @@ class ScriptGenerationService:
     Encapsulates LLM prompt construction and output file management.
     """
 
-    def __init__(self, llm=None):
+    def __init__(self, llm: Any = None) -> None:
         self.llm = llm  # Optionally inject LLM instance
         self.logger = logger
 

@@ -198,9 +198,9 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
             logger.warning(
                 f"[REPLAY] No env value found for ${{{var}}}, leaving as is."
             )
-            return match.group(0)
+            return str(match.group(0))
 
-        return re.sub(r"\$\{(\w+)\}", repl, val)
+        return str(re.sub(r"\$\{(\w+)\}", repl, val))
 
     for idx, action in enumerate(actions):
         try:
@@ -220,12 +220,12 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
             if action_type == "navigate":
                 url = resolved_args.get("url")
                 logger.info(f"[REPLAY] Navigating to {url}")
-                await page.goto(url)
+                await page.goto(str(url))
                 logger.info(f"[REPLAY] Navigated to {url}")
             elif action_type == "click":
                 selector = resolved_args.get("selector")
                 logger.info(f"[REPLAY] Clicking selector: {selector}")
-                await page.click(selector)
+                await page.click(str(selector))
                 logger.info(f"[REPLAY] Clicked {selector}")
             elif action_type == "fill":
                 selector = resolved_args.get("selector")
@@ -233,7 +233,7 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
                 logger.info(
                     f"[REPLAY] Filling selector: {selector} with value: {value}"
                 )
-                await page.fill(selector, value)
+                await page.fill(str(selector), str(value))
                 logger.info(f"[REPLAY] Filled {selector} with {value}")
             else:
                 logger.error(f"Unknown action type at index {idx}: {action_type}")

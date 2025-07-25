@@ -219,10 +219,11 @@ class BrowserAgent:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
             from pydantic.v1 import SecretStr
+            secret_api_key = SecretStr(api_key)
             self.llm = llm or ChatAnthropic(
                 model_name=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
                 temperature=0.0,
-                api_key=SecretStr(api_key),
+                api_key=secret_api_key.get_secret_value(),  # type: ignore[arg-type]
                 timeout=60.0,
                 stop=None,
                 base_url=None,
@@ -410,7 +411,7 @@ class BrowserAgent:
 
             # Get interactive elements if DOM service is available
             elements_context = ""
-            element_map = {}
+            element_map: dict[str, Any] = {}
 
             # Always fetch the current DOM service from the current page (singleton)
             from ..browser.page_manager import PageManager
@@ -509,18 +510,19 @@ class BrowserAgent:
                         f"[Agent] Screenshots found for LLM input: {screenshots}"
                     )
                     for path in screenshots:
-                        try:
-                            # Add image compression to ensure size is under Claude's 5MB limit
-                            from talk2browser.tools.file_system_tools import (
-                                compress_image_to_size_limit,
-                            )
+                        if path is not None:
+                            try:
+                                # Add image compression to ensure size is under Claude's 5MB limit
+                                from talk2browser.tools.file_system_tools import (
+                                    compress_image_to_size_limit,
+                                )
 
-                            compress_image_to_size_limit(path)
-                        # Final size check - if still too large, use extreme measures
-                        except Exception as e:
-                            logger.error(
-                                f"[Agent] Failed to encode/compress screenshot {path} for LLM: {e}"
-                            )
+                                compress_image_to_size_limit(path)
+                            # Final size check - if still too large, use extreme measures
+                            except Exception as e:
+                                logger.error(
+                                    f"[Agent] Failed to encode/compress screenshot {path} for LLM: {e}"
+                                )
                 if is_vision_enabled():
                     vision_results = VisionService.get_instance().get_latest_results()
                     vision_image = VisionService.get_instance().get_latest_image_path()
@@ -555,7 +557,7 @@ class BrowserAgent:
             )
             # Find and update existing system message or insert at start
             system_found = False
-            for i, msg in enumerate(messages):
+            for i, msg in enumerate(messages):  # type: ignore[assignment]
                 if isinstance(msg, SystemMessage):
                     messages[i] = SystemMessage(content=system_content)
                     system_found = True
