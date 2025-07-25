@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from .page import BrowserPage
 
 
@@ -66,7 +66,7 @@ class PageManager:
             return self.pages.get(self.current_page_id)
         return None
 
-    def list_pages(self) -> list[str]:
+    def list_pages(self) -> List[str]:
         return list(self.pages.keys())
 
     def get_page(self, page_id: str) -> Optional[BrowserPage]:

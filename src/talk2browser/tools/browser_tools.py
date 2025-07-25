@@ -448,10 +448,10 @@ async def click(selector: str, *, timeout: int = 5000, element_map: dict = None)
         ActionService.get_instance().record_agent_action(action_data)
         logger.info(f"[click] Recorded click action: {action_data}")
         logger.debug(
-            "[browser_tools] Agent actions after click: ActionService.get_instance().agent_actions"
+            f"[browser_tools] Agent actions after click: {ActionService.get_instance().agent_actions}"
         )
         logger.debug(
-            "[browser_tools] Merged actions after click: ActionService.get_instance().actions"
+            f"[browser_tools] Merged actions after click: {ActionService.get_instance().actions}"
         )
         import os
 
@@ -1001,15 +1001,14 @@ async def screenshot(selector: str = None, path: str = None, **kwargs) -> str:
             locator = page.locator(selector)
             await locator.screenshot(path=path)
             logger.info(f"Screenshot taken of {selector} at {path}")
-            action_data = {
-                "type": "screenshot",
-                "args": {"selector": selector, "path": path},
-            }
-            ActionService.get_instance().record_agent_action(action_data)
         else:
             await page.screenshot(path=path, full_page=True)
             logger.info(f"Full page screenshot taken at {path}")
-        action_data = {"type": "screenshot", "args": {"selector": None, "path": path}}
+
+        action_data = {
+            "type": "screenshot",
+            "args": {"selector": selector if selector else None, "path": path},
+        }
         ActionService.get_instance().record_agent_action(action_data)
         logger.debug(
             f"[browser_tools] Agent actions after screenshot: {ActionService.get_instance().agent_actions}"

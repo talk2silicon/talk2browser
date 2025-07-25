@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,6 @@ class ScriptGenerationService:
             )
             # --- Cleanup unwanted characters: remove markdown code blocks, trim whitespace ---
             if script:
-                import re
-
                 script = re.sub(
                     r"^```[a-zA-Z]*", "", script.strip()
                 )  # Remove opening code block
@@ -126,7 +125,7 @@ class ScriptGenerationService:
                     # Optionally raise an error here if strictness is desired
 
             if output_path is None:
-                safe_task = task.lower().replace(" ", "_").replace("/", "_")[:40]
+                safe_task = re.sub(r'[^a-zA-Z0-9_-]', '_', task.lower())[:40]
                 output_path = str(Path("./generated") / f"playwright_{safe_task}.{ext}")
             from ..tools.file_system_tools import save_text_to_file
 
@@ -201,8 +200,6 @@ class ScriptGenerationService:
             )
             # --- Cleanup unwanted characters: remove markdown code blocks, trim whitespace ---
             if script:
-                import re
-
                 script = re.sub(r"^```[a-zA-Z]*", "", script.strip())
                 script = re.sub(r"```$", "", script.strip())
                 script = script.strip()
@@ -210,7 +207,7 @@ class ScriptGenerationService:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
             if output_path is None:
-                safe_task = task.lower().replace(" ", "_").replace("/", "_")[:40]
+                safe_task = re.sub(r'[^a-zA-Z0-9_-]', '_', task.lower())[:40]
                 output_path = str(Path("./generated") / f"cypress_{safe_task}.cy.js")
             from ..tools.file_system_tools import save_text_to_file
 
@@ -284,8 +281,6 @@ class ScriptGenerationService:
             )
             # --- Cleanup unwanted characters: remove markdown code blocks, trim whitespace ---
             if script:
-                import re
-
                 script = re.sub(r"^```[a-zA-Z]*", "", script.strip())
                 script = re.sub(r"```$", "", script.strip())
                 script = script.strip()
@@ -293,7 +288,7 @@ class ScriptGenerationService:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
             if output_path is None:
-                safe_task = task.lower().replace(" ", "_").replace("/", "_")[:40]
+                safe_task = re.sub(r'[^a-zA-Z0-9_-]', '_', task.lower())[:40]
                 output_path = str(Path("./generated") / f"selenium_{safe_task}.py")
             from ..tools.file_system_tools import save_text_to_file
 

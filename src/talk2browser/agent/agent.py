@@ -265,8 +265,8 @@ class BrowserAgent:
             )
             self.page_manager.add_page("main", browser_page)
             # Initial scan for interactive elements
-            await browser_page.dom_service.get_interactive_elements(highlight=True)
-            elements_str, element_map = await browser_page.dom_service.format_elements()
+            #await browser_page.dom_service.get_interactive_elements(highlight=True)
+            #elements_str, element_map = await browser_page.dom_service.format_elements()
             # logger.info(f"Initial scan: {len(element_map)} elements mapped on 'main' page.")
 
             # logger.info("Browser, BrowserPage, and DOM service initialized successfully")

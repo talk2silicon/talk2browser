@@ -115,6 +115,7 @@ def generate_negative_tests(language: str, prompt: str) -> List[str]:
         "cypress": "cy.js",
         "selenium": "selenium.py",
     }.get(language.lower(), "txt")
+    os.makedirs("generated", exist_ok=True)
     script_path = os.path.join("generated", f"negative_test_{safe_prompt}.{script_ext}")
     with open(script_path, "w") as f:
         f.write(response)

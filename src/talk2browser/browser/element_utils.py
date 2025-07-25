@@ -105,11 +105,8 @@ async def _get_element_properties(
     """Extract properties from an element handle."""
     try:
         # Get basic properties
-        tag_name = (
-            (await handle.get_property("tagName")).lower()
-            if await handle.get_property("tagName")
-            else ""
-        )
+        tag_name_handle = await handle.get_property("tagName")
+        tag_name = (await tag_name_handle.json_value()).lower() if tag_name_handle else ""
         text_content = (await handle.text_content() or "").strip()
 
         # Heuristic: Don't skip if pointer cursor, clickable class, or data-action/link/click present
