@@ -4,6 +4,7 @@ import logging
 from langchain.tools import tool
 from ..browser.page_manager import PageManager
 
+
 @tool
 async def set_code_in_editor(selector: str, code: str) -> str:
     """
@@ -23,11 +24,11 @@ async def set_code_in_editor(selector: str, code: str) -> str:
     browser_page = PageManager.get_instance().get_current_page()
     if not browser_page:
         logger.error("No active browser page found in PageManager.")
-        return f"Error: No active browser page."
+        return "Error: No active browser page."
     page = browser_page.get_page()
     try:
         result = await page.evaluate(
-            '''({selector, code}) => {
+            """({selector, code}) => {
                 const el = document.querySelector(selector);
                 if (!el) throw new Error('Editor not found for selector: ' + selector);
                 // Ace Editor
@@ -59,8 +60,8 @@ async def set_code_in_editor(selector: str, code: str) -> str:
                     return 'codemirror6';
                 }
                 throw new Error('Unsupported or undetected editor type for selector: ' + selector);
-            }''',
-            {"selector": selector, "code": code}
+            }""",
+            {"selector": selector, "code": code},
         )
         logger.info(f"Injected code using editor type: {result}")
         return f"Successfully set code in {result} editor using selector '{selector}'."
@@ -68,7 +69,6 @@ async def set_code_in_editor(selector: str, code: str) -> str:
         logger.error(f"Failed to set code in editor: {e}")
         return f"Error: Failed to set code in editor: {e}"
 
-from langchain.tools import tool
 
 @tool
 def save_json(data: dict, filename: str) -> str:
@@ -82,11 +82,12 @@ def save_json(data: dict, filename: str) -> str:
     """
     import json
     import os
+
     logger = logging.getLogger(__name__)
     try:
         # Ensure the directory exists
         os.makedirs(os.path.dirname(filename), exist_ok=True)
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(data, f, indent=2)
         logger.info(f"Saved JSON to {filename}")
         return filename
