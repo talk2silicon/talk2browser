@@ -20,6 +20,10 @@ test-results/
 *.swo
 *~
 
+# macOS
+.DS_Store
+.DS_Store?
+
 # Logs
 *.log
 
@@ -30,6 +34,7 @@ test-results/
 *.screenshot.png
 *.screenshot.jpg
 generated/
+github_discussions_post.md
 
 # C extensions
 *.so
@@ -232,3 +237,5 @@ references/
 src/talk2browser/services/__pycache__/
 .windsurf/
 __pycache__/
+wip.md
+.DS_Store

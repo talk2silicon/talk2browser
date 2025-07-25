@@ -12,14 +12,25 @@ license = {text = "MIT"}
 authors = [
     {name = "Thushara", email = "your.email@example.com"},
 ]
+
+[tool.poetry.dependencies]
+markdown = "^3.4.4"
+
 dependencies = [
     "playwright>=1.42.0",
     "langgraph>=0.0.1",
     "langchain-anthropic>=0.0.1",
     "langchain-core>=0.0.1",
+    "langchain>=0.1.0",
     "python-dotenv>=1.0.0",
     "scikit-learn>=1.0.0",
     "sentence-transformers>=2.2.2",
+    "pydantic>=2.0.0",
+    "Pillow>=9.0.0",
+    "fpdf2>=2.7.0",
+    "pip",
+    "markdownify",
+    "PyPDF2",
     # Add ultralytics if used
 ]
 
@@ -30,17 +41,15 @@ dev = [
     "black>=23.0.0",
     "isort>=5.12.0",
     "mypy>=1.0.0",
+    "flake8>=6.0.0",
+    "fpdf",
+    "types-Markdown",
+    "types-fpdf2",
+    "types-toml",
 ]
 
 [project.scripts]
 talk2browser = "talk2browser.__main__:main"
-
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
-urls = { "Homepage" = "https://github.com/youruser/talk2browser" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -55,8 +64,13 @@ profile = "black"
 line_length = 88
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+mypy_path = "src"
+packages = ["talk2browser"]
+namespace_packages = true
+explicit_package_bases = true
+ignore_missing_imports = true

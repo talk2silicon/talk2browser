@@ -4,54 +4,31 @@ Browser Agent implementation using LangGraph for browser automation.
 This module provides a stateful agent that can process natural language instructions
 and execute browser automation tasks using Playwright.
 """
+
 import os
 import logging
-import io
-from typing import Annotated, Sequence, TypedDict, Optional
-from PIL import Image  # For image compression
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_anthropic import ChatAnthropic
-from langgraph.graph import StateGraph, END, START
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
+from typing import Annotated, TypedDict, Optional, Dict, Any, List
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_anthropic import ChatAnthropic
-from langgraph.graph import StateGraph, END, START
+from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from ..browser import PlaywrightClient
-from ..browser.dom.service import DOMService
-# ManualModeService fully merged into ActionService; import not needed.
+
 from ..browser.page import BrowserPage
 from ..browser.page_manager import PageManager
 from ..tools import (
-    navigate, click, fill, get_count, is_enabled, list_suggestions, generate_pdf_from_html,
-    generate_script, generate_negative_tests, replay_action_json_with_playwright, list_files_in_folder,
-    set_code_in_editor, save_json
-)
-from ..tools.script_tools import load_test_data
-from ..services.action_service import ActionService  # Ensure this is at the top
-from ..services.sensitive_data_service import SensitiveDataService
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-# Suppress noisy HTTP request/response logs from Anthropic client
-logging.getLogger("anthropic._base_client").setLevel(logging.WARNING)
-
-# Define available tools for the agent
-TOOLS = [
     navigate,
     click,
     fill,
-    get_count,
-    is_enabled,
     list_suggestions,
     generate_pdf_from_html,
     generate_script,
@@ -59,23 +36,34 @@ TOOLS = [
     replay_action_json_with_playwright,
     list_files_in_folder,
     load_test_data,
-    set_code_in_editor,
-    save_json  # <-- Added save_json tool for LLM
-]
-logger.debug(f"[Agent] TOOLS after registration: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
-#logger.info(f"[Agent] TOOLS registered: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in TOOLS]}")
-def _tool_display_name(tool):
-    return getattr(tool, 'name', None) or getattr(tool, '__name__', None) or type(tool).__name__
-def log_registered_tools():
-    tool_info = []
-    for tool in TOOLS:
-        name = _tool_display_name(tool)
-        doc = getattr(tool, '__doc__', '')
-        tool_info.append(f"- {name}: {doc.strip().splitlines()[0] if doc else 'No docstring'}")
-    #logger.info("Registered tools (detailed):\n" + "\n".join(tool_info))
+    save_json,
+    extract_structured_data,
+)
 
-log_registered_tools()
-#logger.info(f"Registered tools: [{', '.join(_tool_display_name(tool) for tool in TOOLS)}]")
+from ..services.action_service import ActionService
+from ..services.sensitive_data_service import SensitiveDataService
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# Define available tools for the agent
+TOOLS = [
+    navigate,
+    click,
+    fill,
+    list_suggestions,
+    generate_pdf_from_html,
+    generate_script,
+    generate_negative_tests,
+    replay_action_json_with_playwright,
+    list_files_in_folder,
+    load_test_data,
+    save_json,
+    extract_structured_data,
+]
 
 # System prompt template
 SYSTEM_PROMPT = """
@@ -194,19 +182,29 @@ Example:
 - When the user requests to replay an action JSON file, ONLY call the replay tool. If the replay fails, report the error and do not attempt to generate scripts or take additional actions unless the user explicitly requests them.
 """
 
+
 class AgentState(TypedDict):
     """State for the browser agent following LangGraph pattern."""
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+
+    messages: Annotated[List[BaseMessage], add_messages]
     next: str  # For LangGraph routing
+    element_map: Dict[str, str]  # Element hash to xpath mapping
     # Optional vision meta-data for LLM context
     vision: dict
 
+
 class BrowserAgent:
     """Agent for browser automation using LangGraph and Playwright."""
-    
-    def __init__(self, llm: Optional[ChatAnthropic] = None, headless: bool = False, info_mode: bool = False, sensitive_data: dict = None):
+
+    def __init__(
+        self,
+        llm: Optional[ChatAnthropic] = None,
+        headless: bool = False,
+        info_mode: bool = False,
+        sensitive_data: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize the browser agent.
-        
+
         Args:
             llm: Optional ChatAnthropic instance. If not provided, a default one will be created.
             headless: Whether to run the browser in headless mode.
@@ -216,33 +214,47 @@ class BrowserAgent:
         self.headless = headless
         self.info_mode = info_mode
         self.sensitive_data = sensitive_data or {}
-        self.story_log = []  # Collects story steps if info_mode is enabled
+        self.story_log: List[str] = []  # Collects story steps if info_mode is enabled
         # Initialize LLM
-        self.llm = llm or ChatAnthropic(
-            model=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
-            temperature=0.0,
-            api_key=os.getenv("ANTHROPIC_API_KEY")
-        )
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            from pydantic.v1 import SecretStr
+
+            secret_api_key = SecretStr(api_key)
+            self.llm = llm or ChatAnthropic(
+                model_name=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
+                temperature=0.0,
+                api_key=secret_api_key.get_secret_value(),  # type: ignore[arg-type]
+                timeout=60.0,
+                stop=None,
+                base_url=None,
+            )
+        else:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
         from .llm_singleton import set_llm
+
         set_llm(self.llm)
-        
+
         # Initialize browser client and DOM service (will be started in __aenter__)
         self.client = PlaywrightClient(headless=headless)
-        self.dom_service = None
+        self.dom_service: Optional[Any] = None
         # ManualModeService fully merged into ActionService; no instance needed.
         # Initialize PageManager (singleton)
         self.page_manager = PageManager.get_instance()
-        
+
         # User-friendly SensitiveDataService auto-init
         if getattr(SensitiveDataService, "_instance", None) is None:
-            logger.warning("SensitiveDataService not configured, defaulting to environment-only secrets.")
+            logger.warning(
+                "SensitiveDataService not configured, defaulting to environment-only secrets."
+            )
             SensitiveDataService.configure({})
-        
+
         self.graph = self._create_agent_graph()
-        #logger.info("BrowserAgent initialized with %s", self.llm.__class__.__name__)
-        logger.debug(f"Sensitive data keys: {list(self.sensitive_data.keys()) if self.sensitive_data else []}")
-    
-    async def __aenter__(self):
+        logger.debug(
+            f"Sensitive data keys: {list(self.sensitive_data.keys()) if self.sensitive_data else []}"
+        )
+
+    async def __aenter__(self) -> "BrowserAgent":
         """Async context manager entry."""
         try:
             # Start the browser
@@ -254,92 +266,95 @@ class BrowserAgent:
             await self.client.page.wait_for_load_state("networkidle")
 
             # Create BrowserPage abstraction and add to PageManager
-            #logger.info("Creating initial BrowserPage and DOMService...")
             browser_page = BrowserPage(self.client.page)
             self.dom_service = browser_page.dom_service
             # Set DOMService reference for ActionService real-time merging
             ActionService.get_instance().set_dom_service(self.dom_service)
             # Expose mode change handler to Playwright (handled by ActionService)
-            await ActionService.get_instance().expose_mode_change_handler(self.client.page)
+            await ActionService.get_instance().expose_mode_change_handler(
+                self.client.page
+            )
             self.page_manager.add_page("main", browser_page)
-            #logger.info("Initial BrowserPage added to PageManager as 'main'")
-
             # Initial scan for interactive elements
-            #logger.info("Performing initial element scan on main BrowserPage...")
-            await browser_page.dom_service.get_interactive_elements(highlight=True)
-            elements_str, element_map = browser_page.dom_service.format_elements()
-            #logger.info(f"Initial scan: {len(element_map)} elements mapped on 'main' page.")
+            # await browser_page.dom_service.get_interactive_elements(highlight=True)
+            # elements_str, element_map = await browser_page.dom_service.format_elements()
+            # logger.info(f"Initial scan: {len(element_map)} elements mapped on 'main' page.")
 
-            #logger.info("Browser, BrowserPage, and DOM service initialized successfully")
+            # logger.info("Browser, BrowserPage, and DOM service initialized successfully")
             return self
         except Exception as e:
             logger.error("Failed to initialize browser: %s", str(e), exc_info=True)
             await self.__aexit__(type(e), e, None)
             raise
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
-        if hasattr(self, 'client') and self.client:
+        if hasattr(self, "client") and self.client:
             try:
                 await self.client.close()
                 logger.debug("Browser client closed successfully")
             except Exception as e:
                 logger.warning("Error closing browser client: %s", str(e))
-    
-    def _create_agent_graph(self):
+
+    def _create_agent_graph(self) -> Any:
         """Create the two-node LangGraph for the agent, using the standard ToolNode."""
-        logger.debug("Creating agent graph with standard ToolNode (no custom tool dispatch)")
+        logger.debug(
+            "Creating agent graph with standard ToolNode (no custom tool dispatch)"
+        )
         workflow = StateGraph(AgentState)
         workflow.add_node("agent", self._chatbot)
         workflow.add_node("tools", ToolNode(TOOLS))
         # Conditional routing: if _route_tools returns "tools", go to tools, else END
         workflow.add_conditional_edges(
-            "agent",
-            self._route_tools,
-            {"tools": "tools", END: END}
+            "agent", self._route_tools, {"tools": "tools", END: END}
         )
         workflow.add_edge("tools", "agent")
         workflow.set_entry_point("agent")
         self.graph = workflow.compile()
-        logger.debug("Created agent graph with standard ToolNode and conditional routing")
+        logger.debug(
+            "Created agent graph with standard ToolNode and conditional routing"
+        )
         return self.graph
 
-
-    
-    def _route_tools(self, state: AgentState):
+    def _route_tools(self, state: AgentState) -> str:
         """Route to tools node if tool calls are present, otherwise end."""
         if not (messages := state.get("messages", [])):
             raise ValueError("No messages found in state")
-            
+
         ai_message = messages[-1]
-        
+
         # Count tool calls to prevent infinite loops
         tool_call_count = sum(
-            1 for msg in messages 
-            if hasattr(msg, "tool_calls") and msg.tool_calls
+            1 for msg in messages if hasattr(msg, "tool_calls") and msg.tool_calls
         )
-        
+
         # Limit maximum tool calls
         MAX_TOOL_CALLS = 50
         if tool_call_count >= MAX_TOOL_CALLS:
-            logger.warning(f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation")
-            return END
-        
+            logger.warning(
+                f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation"
+            )
+            return str(END)
+
         # Check if the last message has tool calls
         if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
-            logger.debug(f"[Agent] _route_tools: tool_calls present in last message: {ai_message.tool_calls}")
+            logger.debug(
+                f"[Agent] _route_tools: tool_calls present in last message: {ai_message.tool_calls}"
+            )
             return "tools"
-        logger.debug("[Agent] _route_tools: No tool calls in last message, ending conversation")
-        return END
+        logger.debug(
+            "[Agent] _route_tools: No tool calls in last message, ending conversation"
+        )
+        return str(END)
 
     # --- PageManager integration methods ---
-    def create_new_page(self, page_id: str, playwright_page):
+    def create_new_page(self, page_id: str, playwright_page: Any) -> None:
         """Create and add a new BrowserPage to the PageManager."""
         browser_page = BrowserPage(playwright_page)
         self.page_manager.add_page(page_id, browser_page)
         logger.debug(f"Created and added new BrowserPage with id {page_id}")
 
-    def switch_page(self, page_id: str):
+    def switch_page(self, page_id: str) -> None:
         """Switch to a different BrowserPage by id."""
         page = self.page_manager.switch_to(page_id)
         if page:
@@ -347,51 +362,61 @@ class BrowserAgent:
         else:
             logger.error(f"Failed to switch to BrowserPage with id {page_id}")
 
-    def close_page(self, page_id: str):
+    def close_page(self, page_id: str) -> None:
         """Close and remove a BrowserPage by id."""
         self.page_manager.close_page(page_id)
         logger.debug(f"Closed BrowserPage with id {page_id}")
+
     # --- End PageManager integration ---
 
-    
     async def _chatbot(self, state: AgentState) -> AgentState:
         """Process messages with LLM and determine next step with full context.
         Handles page state, interactive elements, and LLM interaction.
         """
         logger.info("[Agent] Waiting for manual mode if needed...")
         await ActionService.get_instance().wait_if_manual_mode()
-        logger.info("[Agent] Manual mode wait complete. Checking for new manual actions...")
+        logger.info(
+            "[Agent] Manual mode wait complete. Checking for new manual actions..."
+        )
 
         # Only inject new manual actions (one-time) after each manual mode pause
         new_manual_actions = ActionService.get_instance().pop_new_manual_actions()
-        logger.info(f"[Agent] Retrieved {len(new_manual_actions)} new manual actions after manual mode pause.")
-        logger.debug(f"[Agent] Message state before manual action injection: {state['messages']}")
+        logger.info(
+            f"[Agent] Retrieved {len(new_manual_actions)} new manual actions after manual mode pause."
+        )
+        logger.debug(
+            f"[Agent] Message state before manual action injection: {state['messages']}"
+        )
         if new_manual_actions:
-            from langchain_core.messages import ToolMessage
-            logger.info(f"[Agent] Injecting {len(new_manual_actions)} new manual actions into LLM context.")
+            logger.info(
+                f"[Agent] Injecting {len(new_manual_actions)} new manual actions into LLM context."
+            )
             for action in new_manual_actions:
                 msg = ToolMessage(
                     tool_call_id=action.get("id", "manual"),
                     tool_name=action.get("type", "manual_action"),
-                    content=str(action)
+                    content=str(action),
                 )
                 state["messages"].append(msg)
-            logger.debug(f"[Agent] Message state after manual action injection: {state['messages']}")
+            logger.debug(
+                f"[Agent] Message state after manual action injection: {state['messages']}"
+            )
         messages = state["messages"]
 
         try:
             # Get page state
             logger.debug("Getting current page state")
             page_state = await self.client.get_page_state()
-            current_url = page_state.get('url', 'No page loaded')
-            current_title = page_state.get('title', '')
-            
+            current_url = page_state.get("url", "No page loaded")
+            current_title = page_state.get("title", "")
+
             # Get interactive elements if DOM service is available
             elements_context = ""
-            element_map = {}
+            element_map: dict[str, Any] = {}
 
             # Always fetch the current DOM service from the current page (singleton)
             from ..browser.page_manager import PageManager
+
             browser_page = PageManager.get_instance().get_current_page()
             dom_service = browser_page.get_dom_service() if browser_page else None
 
@@ -402,19 +427,23 @@ class BrowserAgent:
                     await dom_service.get_interactive_elements(highlight=True)
 
                     # Get formatted elements and map
-                    elements_context, element_map = dom_service.format_elements()
+                    elements_context, element_map = await dom_service.format_elements()
                     logger.debug(f"Retrieved {len(element_map)} interactive elements")
 
                     # Overwrite element map in state for tools (removes any previous map)
                     state["element_map"] = element_map  # Always latest
-                    logger.debug(f"[Agent] Overwrote element_map in state with {len(element_map)} elements")
+                    logger.debug(
+                        f"[Agent] Overwrote element_map in state with {len(element_map)} elements"
+                    )
 
                     if self.info_mode:
                         step = f"Step: Inspected the page for interactive elements.\n  → Found elements:\n{elements_context}"
                         print(step)
                         self.story_log.append(step)
                 except Exception as e:
-                    logger.error(f"Error getting interactive elements: {e}", exc_info=True)
+                    logger.error(
+                        f"Error getting interactive elements: {e}", exc_info=True
+                    )
                     elements_context = f"Error scanning elements: {str(e)}"
                     if self.info_mode:
                         step = f"Step: Failed to scan elements due to error: {str(e)}"
@@ -427,30 +456,35 @@ class BrowserAgent:
                     step = "Step: DOM service not initialized. Skipping element scan."
                     print(step)
                     self.story_log.append(step)
-            
+
             # Build context for LLM
             context = [
                 f"Current URL: {current_url}",
                 f"Page title: {current_title}",
-                elements_context
+                elements_context,
             ]
             # Build a human-readable element hash map section
             if element_map:
-                element_map_section = ["\n## Interactive Elements (hash → description):"]
+                element_map_section = [
+                    "\n## Interactive Elements (hash → description):"
+                ]
                 for h, desc in element_map.items():
                     element_map_section.append(f"- {h}: {desc}")
-                element_map_section.append("\n**Only use these hashes in your tool calls.**")
+                element_map_section.append(
+                    "\n**Only use these hashes in your tool calls.**"
+                )
                 element_map_str = "\n".join(element_map_section)
             else:
                 element_map_str = "\n(No interactive elements detected on this page.)"
             # --- Vision meta-data formatting and injection ---
             vision_section = ""
-            screenshot_blobs = []
-            import os, base64
             try:
                 from ..services.vision_service import VisionService
                 from ..utils.config import is_vision_enabled
-                def format_vision_metadata(image_path, detections):
+
+                def format_vision_metadata(
+                    image_path: str, detections: List[Dict[str, Any]]
+                ) -> str:
                     if not detections:
                         return "## Vision UI Element Detections (YOLOv11):\n(No UI elements detected by vision model.)"
                     lines = ["## Vision UI Element Detections (YOLOv11):"]
@@ -462,97 +496,71 @@ class BrowserAgent:
                     if image_path:
                         lines.append(f"Screenshot: {image_path}")
                     return "\n".join(lines)
+
                 # Attach screenshots to LLM vision input if feature flag enabled
                 if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1":
-                    logger.info("[Agent] Screenshot-to-LLM feature flag is enabled. Preparing screenshots for LLM vision input.")
+                    logger.info(
+                        "[Agent] Screenshot-to-LLM feature flag is enabled. Preparing screenshots for LLM vision input."
+                    )
                     agent_actions = ActionService.get_instance().get_agent_actions()
                     # Only include screenshots from recent actions (last 3, or all if fewer)
-                    screenshots = [a.get("screenshot_path") for a in agent_actions[-3:] if a.get("screenshot_path")]
-                    logger.debug(f"[Agent] Screenshots found for LLM input: {screenshots}")
+                    screenshots = [
+                        a.get("screenshot_path")
+                        for a in agent_actions[-3:]
+                        if a.get("screenshot_path")
+                    ]
+                    logger.debug(
+                        f"[Agent] Screenshots found for LLM input: {screenshots}"
+                    )
                     for path in screenshots:
-                        try:
-                            # Add image compression to ensure size is under Claude's 5MB limit
-                            with Image.open(path) as img:
-                                # Start with quality 80 (good balance of quality and size)
-                                quality = 80
-                                max_size = 4.5 * 1024 * 1024  # 4.5MB to be safe (buffer below 5MB)
-                                
-                                # First try: compress with initial quality
-                                compressed_img = io.BytesIO()
-                                img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                
-                                # Check if size is still too large
-                                while compressed_img.tell() > max_size and quality > 15:
-                                    # Reduce quality and try again
-                                    quality -= 10
-                                    logger.debug(f"[Agent] Reducing image quality to {quality} to meet size limit")
-                                    compressed_img = io.BytesIO()
-                                    img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                
-                                # If still too large, resize the image
-                                if compressed_img.tell() > max_size:
-                                    # Calculate new dimensions to reduce by 25% each time
-                                    width, height = img.size
-                                    resize_factor = 0.75
-                                    
-                                    while compressed_img.tell() > max_size and resize_factor > 0.3:
-                                        new_width = int(width * resize_factor)
-                                        new_height = int(height * resize_factor)
-                                        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
-                                        
-                                        # Try with the resized image
-                                        compressed_img = io.BytesIO()
-                                        resized_img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                        
-                                        # If still too large, reduce size further
-                                        if compressed_img.tell() > max_size:
-                                            resize_factor -= 0.15
-                                        else:
-                                            break
-                                    
-                                    logger.debug(f"[Agent] Resized image to {resize_factor:.2f}x original size to meet size limit")
-                                
-                                # Get the compressed image bytes
-                                compressed_img.seek(0)
-                                img_bytes = compressed_img.read()
-                                
-                                # Final size check - if still too large, use extreme measures
-                                if len(img_bytes) > max_size:
-                                    logger.warning(f"[Agent] Image still too large ({len(img_bytes)/1024/1024:.2f}MB), using grayscale conversion")
-                                    gray_img = img.convert('L')  # Convert to grayscale
-                                    compressed_img = io.BytesIO()
-                                    gray_img.save(compressed_img, format="JPEG", quality=quality, optimize=True)
-                                    compressed_img.seek(0)
-                                    img_bytes = compressed_img.read()
-                                
-                                # Encode to base64
-                                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-                                screenshot_blobs.append(img_b64)
-                                logger.info(f"[Agent] Added compressed screenshot {path} to LLM vision input (base64, {len(img_b64)} bytes, quality={quality})")
-                        except Exception as e:
-                            logger.error(f"[Agent] Failed to encode/compress screenshot {path} for LLM: {e}")
+                        if path is not None:
+                            try:
+                                # Add image compression to ensure size is under Claude's 5MB limit
+                                from talk2browser.tools.file_system_tools import (
+                                    compress_image_to_size_limit,
+                                )
+
+                                compress_image_to_size_limit(path)
+                            # Final size check - if still too large, use extreme measures
+                            except Exception as e:
+                                logger.error(
+                                    f"[Agent] Failed to encode/compress screenshot {path} for LLM: {e}"
+                                )
                 if is_vision_enabled():
                     vision_results = VisionService.get_instance().get_latest_results()
                     vision_image = VisionService.get_instance().get_latest_image_path()
                     if vision_results and vision_image:
-                        vision_section = format_vision_metadata(vision_image, vision_results)
-                        state["vision"] = {"image_path": vision_image, "detections": vision_results}
-                        logger.info(f"[Agent] Added vision data to state: {state['vision']}")
+                        vision_section = format_vision_metadata(
+                            vision_image, vision_results
+                        )
+                        state["vision"] = {
+                            "image_path": vision_image,
+                            "detections": vision_results,
+                        }
+                        logger.info(
+                            f"[Agent] Added vision data to state: {state['vision']}"
+                        )
                     else:
-                        logger.info("[Agent] Vision enabled but no results to add to state.")
+                        logger.info(
+                            "[Agent] Vision enabled but no results to add to state."
+                        )
             except Exception as e:
-                logger.error(f"[Agent] Vision meta-data formatting/injection failed: {e}")
+                logger.error(
+                    f"[Agent] Vision meta-data formatting/injection failed: {e}"
+                )
             # Create system message content
-            system_content = "\n\n".join([
-                SYSTEM_PROMPT,
-                "Current page state:",
-                "\n".join(context),
-                element_map_str,
-                vision_section
-            ])
+            system_content = "\n\n".join(
+                [
+                    SYSTEM_PROMPT,
+                    "Current page state:",
+                    "\n".join(context),
+                    element_map_str,
+                    vision_section,
+                ]
+            )
             # Find and update existing system message or insert at start
             system_found = False
-            for i, msg in enumerate(messages):
+            for i, msg in enumerate(messages):  # type: ignore[assignment]
                 if isinstance(msg, SystemMessage):
                     messages[i] = SystemMessage(content=system_content)
                     system_found = True
@@ -561,17 +569,26 @@ class BrowserAgent:
                 messages.insert(0, SystemMessage(content=system_content))
 
             # --- LLM Debug Logging ---
-            logger.debug(f"[Agent] Registered tools: {[t.name if hasattr(t, 'name') else t.__name__ for t in TOOLS]}")
-            logger.debug(f"[Agent] LLM input messages (system+user):\n{[getattr(m, 'content', str(m)) for m in messages]}")
-            logger.debug(f"[Agent] System prompt (truncated to 500 chars): {system_content[:500]}")
+            logger.debug(
+                f"[Agent] Registered tools: {[t.name if hasattr(t, 'name') else t.__name__ for t in TOOLS]}"
+            )
+            logger.debug(
+                f"[Agent] LLM input messages (system+user):\n{[getattr(m, 'content', str(m)) for m in messages]}"
+            )
+            logger.debug(
+                f"[Agent] System prompt (truncated to 500 chars): {system_content[:500]}"
+            )
             # Prepare LLM with tools
             llm_with_tools = self.llm.bind_tools(TOOLS)
             # Attach screenshots as image blocks in HumanMessage if feature flag is enabled
-            if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1" and screenshot_blobs:
-                logger.info("[Agent] Attaching screenshots to LLM input as image blocks in message content")
+            if os.getenv("T2B_SCREENSHOT_TO_LLM", "0") == "1" and []:
+                logger.info(
+                    "[Agent] Attaching screenshots to LLM input as image blocks in message content"
+                )
                 # Find the last HumanMessage (the user prompt)
                 from langchain_core.messages import HumanMessage
-                for i in range(len(messages)-1, -1, -1):
+
+                for i in range(len(messages) - 1, -1, -1):
                     if isinstance(messages[i], HumanMessage):
                         user_msg = messages[i]
                         break
@@ -580,76 +597,44 @@ class BrowserAgent:
                 if user_msg and isinstance(user_msg.content, str):
                     # Replace string content with a list of content blocks
                     content_blocks = [{"type": "text", "text": user_msg.content}]
-                    for blob in screenshot_blobs:
-                        logger.debug(f"[Agent] Screenshot blob type: {type(blob)}, length: {len(blob) if isinstance(blob, str) else 'N/A'}")
-                        if isinstance(blob, str) and blob.strip():
-                            content_blocks.append({
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": blob
-                                }
-                            })
-                        else:
-                            logger.error(f"[Agent] Skipping invalid screenshot blob: {blob}")
-                    logger.debug(f"[Agent] LLM HumanMessage content blocks: {content_blocks}")
-                    messages[i] = HumanMessage(content=content_blocks)
-            
+                    logger.debug(
+                        f"[Agent] LLM HumanMessage content blocks: {content_blocks}"
+                    )
+                    messages[i] = HumanMessage(content=content_blocks)  # type: ignore
+
             # Invoke LLM with tools
             response = await llm_with_tools.ainvoke(messages)
             logger.debug(f"[Agent] LLM response: {response}")
-            if hasattr(response, 'tool_calls') and response.tool_calls:
+            if hasattr(response, "tool_calls") and response.tool_calls:
                 logger.info(f"[Agent] LLM tool calls: {response.tool_calls}")
-            if self.info_mode and hasattr(response, 'tool_calls') and response.tool_calls:
-                tools_used = [call['name'] if isinstance(call, dict) else getattr(call, 'name', str(call)) for call in response.tool_calls]
+            if (
+                self.info_mode
+                and hasattr(response, "tool_calls")
+                and response.tool_calls
+            ):
+                tools_used = [
+                    (
+                        call["name"]
+                        if isinstance(call, dict)
+                        else getattr(call, "name", str(call))
+                    )
+                    for call in response.tool_calls
+                ]
                 step = f"Step: LLM decided to use tool(s): {', '.join(tools_used)}"
                 print(step)
                 self.story_log.append(step)
-            
+
             # Check if response has tool calls
-            if hasattr(response, 'tool_calls') and response.tool_calls:
+            if hasattr(response, "tool_calls") and response.tool_calls:
                 logger.info("Tool calls detected in LLM response")
-                # --- Calendar Trigger Post-Processing ---
-                try:
-                    # Only process if the last tool call is a click
-                    last_tool_call = response.tool_calls[-1] if response.tool_calls else None
-                    if last_tool_call and (getattr(last_tool_call, 'name', None) == 'click' or (isinstance(last_tool_call, dict) and last_tool_call.get('name') == 'click')):
-                        # Try to extract selector/label for calendar detection
-                        args = getattr(last_tool_call, 'args', None) or last_tool_call.get('args', {})
-                        selector = args.get('selector', '') if args else ''
-                        # Heuristic: look for calendar triggers by selector or label
-                        calendar_keywords = ['calendar', 'date', 'check in', 'check out', 'add dates']
-                        if any(k in selector.lower() for k in calendar_keywords):
-                            #logger.info(f"[Calendar Hook] Detected calendar trigger click: {selector}. Will wait for popup...")
-                            # Wait for a likely calendar popup (heuristic selector)
-                            popup_selectors = ['[role="dialog"]', '.calendar', '.datepicker', '[data-testid*="calendar"]', '[aria-label*="calendar"]']
-                            from ..tools.browser_tools import wait_for_selector
-                            found_popup = False
-                            for popup_selector in popup_selectors:
-                                #logger.info(f"[Calendar Hook] Waiting for popup selector: {popup_selector}")
-                                result = await wait_for_selector(popup_selector, state="visible", timeout=4000)
-                                #logger.info(f"[Calendar Hook] wait_for_selector result for {popup_selector}: {result}")
-                                if 'Waited' in result:
-                                    found_popup = True
-                                    break
-                            if not found_popup:
-                                logger.warning(f"[Calendar Hook] No calendar popup appeared after click on {selector}")
-                            else:
-                                # Refresh DOM after popup appears
-                                browser_page = PageManager.get_instance().get_current_page()
-                                dom_service = browser_page.get_dom_service() if browser_page else None
-                                if dom_service:
-                                    #logger.info("[Calendar Hook] Refreshing interactive elements after calendar popup...")
-                                    await dom_service.get_interactive_elements(highlight=True)
-                                    #logger.info("[Calendar Hook] DOM refreshed after calendar popup.")
-                except Exception as cal_exc:
-                    logger.error(f"[Calendar Hook] Error in calendar post-processing: {cal_exc}", exc_info=True)
+                # DOM post-processing is now handled by explicit LLM/tool calls, not by the agent.
                 return {
                     "messages": messages + [response],
-                    "next": "tools"
+                    "next": "tools",
+                    "element_map": {},
+                    "vision": {},
                 }
-            
+
             # No tool calls, end the conversation
             logger.info("No tool calls in LLM response, ending conversation")
             if self.info_mode:
@@ -658,20 +643,26 @@ class BrowserAgent:
                 self.story_log.append(step)
             return {
                 "messages": messages + [response],
-                "next": END
+                "next": END,
+                "element_map": {},
+                "vision": {},
             }
-            
+
         except Exception as e:
             error_msg = f"Error in chatbot: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return {
                 "messages": messages + [SystemMessage(content=error_msg)],
-                "next": END
+                "next": END,
+                "element_map": {},
+                "vision": {},
             }
-    
-    async def run(self, task: str, sensitive_data: dict = None) -> str:
+
+    async def run(
+        self, task: str, sensitive_data: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Run the agent with the given task.
-        
+
         Args:
             task: The task or query for the agent.
             sensitive_data: Optional dict for runtime secret injection (overrides self.sensitive_data)
@@ -682,29 +673,40 @@ class BrowserAgent:
             # Use provided sensitive_data or fall back to self.sensitive_data
             effective_sensitive_data = sensitive_data or self.sensitive_data or {}
             # Configure SensitiveDataService for this run
-            from talk2browser.services.sensitive_data_service import SensitiveDataService
+            from talk2browser.services.sensitive_data_service import (
+                SensitiveDataService,
+            )
+
             SensitiveDataService.configure(effective_sensitive_data)
-            logger.info(f"SensitiveDataService configured with keys: {list(effective_sensitive_data.keys()) if effective_sensitive_data else []}")
+            logger.info(
+                f"SensitiveDataService configured with keys: {list(effective_sensitive_data.keys()) if effective_sensitive_data else []}"
+            )
             # Initialize state
             initial_state = AgentState(
                 messages=[HumanMessage(content=task)],
-                next="agent"
+                next="agent",
+                element_map={},
+                vision={},
             )
             logger.info(f"Starting agent with task: {task}")
-            result = await self.graph.ainvoke(initial_state, config={"recursion_limit": 100})
+            result = await self.graph.ainvoke(
+                initial_state, config={"recursion_limit": 100}
+            )
             # Get final response
             messages = result["messages"]
             last_message = messages[-1]
             # Extract content from last message
-            response = last_message.content if hasattr(last_message, 'content') else str(last_message)
+            response = (
+                last_message.content
+                if hasattr(last_message, "content")
+                else str(last_message)
+            )
             logger.info("Agent task completed")
             # --- Final block: generate and save merged action JSON with scenario_name ---
             try:
-                path = ActionService.get_instance().save_merged_actions_with_prompt(task)
-                #logger.info(f"Merged actions saved to {path} via ActionService.save_merged_actions_with_prompt")
+                ActionService.get_instance().save_merged_actions_with_prompt(task)
             except Exception as final_exc:
                 logger.error(f"Failed to save merged actions: {final_exc}")
-            # --- End final block ---
             return response
         except Exception as e:
             error_msg = f"Error running agent: {str(e)}"

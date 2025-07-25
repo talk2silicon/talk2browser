@@ -1,6 +1,7 @@
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 from .page import BrowserPage
+
 
 class PageManager:
     """
@@ -8,24 +9,29 @@ class PageManager:
     Provides methods to create, switch, close, and list pages.
     Implements the singleton pattern so all code can use PageManager.get_instance().
     """
+
     _instance = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.pages: Dict[str, BrowserPage] = {}  # key: page_id or url
         self.current_page_id: Optional[str] = None
         self.logger = logging.getLogger(__name__)
         self.logger.debug(f"PageManager instance id: {id(self)}")
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> "PageManager":
         if cls._instance is None:
             cls._instance = cls()
-            logging.getLogger(__name__).debug(f"Created PageManager singleton id: {id(cls._instance)}")
+            logging.getLogger(__name__).debug(
+                f"Created PageManager singleton id: {id(cls._instance)}"
+            )
         else:
-            logging.getLogger(__name__).debug(f"Using existing PageManager singleton id: {id(cls._instance)}")
+            logging.getLogger(__name__).debug(
+                f"Using existing PageManager singleton id: {id(cls._instance)}"
+            )
         return cls._instance
 
-    def add_page(self, page_id: str, browser_page: BrowserPage):
+    def add_page(self, page_id: str, browser_page: BrowserPage) -> None:
         self.pages[page_id] = browser_page
         self.logger.info(f"Added BrowserPage with id {page_id}")
         if self.current_page_id is None:
@@ -42,7 +48,7 @@ class PageManager:
         self.logger.error(f"Page id {page_id} not found in PageManager")
         return None
 
-    def close_page(self, page_id: str):
+    def close_page(self, page_id: str) -> None:
         if page_id in self.pages:
             del self.pages[page_id]
             self.logger.info(f"Closed BrowserPage with id {page_id}")
@@ -53,7 +59,9 @@ class PageManager:
         self.logger.debug(f"PageManager instance id in close_page: {id(self)}")
 
     def get_current_page(self) -> Optional[BrowserPage]:
-        self.logger.debug(f"PageManager instance id in get_current_page: {id(self)} | current_page_id: {self.current_page_id}")
+        self.logger.debug(
+            f"PageManager instance id in get_current_page: {id(self)} | current_page_id: {self.current_page_id}"
+        )
         if self.current_page_id:
             return self.pages.get(self.current_page_id)
         return None

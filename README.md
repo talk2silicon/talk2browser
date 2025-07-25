@@ -1,3 +1,10 @@
+<div align="center">
+  <img src="assets/logo.svg" alt="Talk2Browser Logo" height="100" />
+  
+  <br/>
+  <a href="http://www.talk2browser.com" target="_blank"><b>Visit the website &rarr; talk2browser.com</b></a>
+</div>
+
 # Talk2Browser
 
 [![Watch the demo on YouTube](assets/talk2browser.png)](https://youtu.be/mOcW7bFahdk)
@@ -21,20 +28,124 @@ A self-improving browser automation system powered by LLMs, Playwright, and modu
 
 ## 🛠️ Installation
 
-1. **Python 3.10+ required.**
-2. **Install Playwright browsers:**
+### Prerequisites
+- **Python 3.10+** (required)
+- **Git** (for cloning the repository)
+- **Anthropic API Key** (for LLM functionality)
+
+### Step 1: Environment Setup
+
+**Create a virtual environment (recommended):**
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
+```
+
+### Step 2: Clone and Install
+
+```bash
+# Clone the repository
+git clone https://github.com/talk2silicon/talk2browser.git
+cd talk2browser
+
+# Install the package in development mode (includes all dependencies)
+pip install -e .[dev]
+
+# Install Playwright browsers (required for browser automation)
+python -m playwright install
+```
+
+**Note for Contributors:** All dependencies are declared in `pyproject.toml`. The `pip install -e .[dev]` command installs:
+- All runtime dependencies (playwright, langchain, etc.)
+- All development dependencies (pytest, mypy, black, flake8)
+- No additional manual pip installs should be needed
+
+### Step 3: API Key Setup
+
+1. **Get your Anthropic API Key:**
+   - Visit [Anthropic Console](https://console.anthropic.com/)
+   - Sign up or log in to your account
+   - Navigate to "API Keys" section
+   - Create a new API key with appropriate permissions
+   - Copy the key (starts with `sk-ant-`)
+
+2. **Configure environment variables:**
    ```bash
-   playwright install
-   ```
-3. **Install the package in development mode:**
-   ```bash
-   pip install -e .[dev]
-   ```
-4. **Copy and configure your environment variables:**
-   ```bash
+   # Copy the example environment file
    cp .env.example .env
-   # Edit .env and add your ANTHROPIC_API_KEY and other secrets
+   
+   # Edit .env file and add your API key
+   # Replace YOUR_API_KEY_HERE with your actual key
+   ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
    ```
+
+### Step 4: Verify Installation
+
+Test your setup with a simple example:
+
+```bash
+# Run the GitHub trending example
+python examples/test_agent.py --task github_trending
+```
+
+**Expected output:**
+- Browser window opens
+- Navigates to GitHub trending page
+- Extracts repository information
+- Generates a PDF report
+- Creates a Playwright script
+
+If successful, you'll see files like:
+- `trending_now_report.pdf`
+- `github_trending_script.py`
+
+---
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**1. "No module named 'playwright'"**
+```bash
+# Install Playwright browsers
+python -m playwright install
+```
+
+**2. "Anthropic API key not found"**
+- Check your `.env` file exists and contains `ANTHROPIC_API_KEY`
+- Verify the key starts with `sk-ant-`
+- Ensure `.env` is in the project root directory
+
+**3. "Browser launch failed"**
+```bash
+# Reinstall Playwright browsers
+python -m playwright install --force
+```
+
+**4. "Permission denied" on macOS/Linux**
+```bash
+# Make sure you're in the virtual environment
+source venv/bin/activate
+# Try with --user flag if needed
+pip install --user -e .[dev]
+```
+
+**5. PDF generation fails**
+- Ensure you have sufficient disk space
+- Check write permissions in the project directory
+- Verify Playwright browsers are installed
+
+### Getting Help
+
+- **Issues**: [GitHub Issues](https://github.com/talk2silicon/talk2browser/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/talk2silicon/talk2browser/discussions)
+- **Website**: [talk2browser.com](http://www.talk2browser.com)
 
 ---
 
@@ -218,13 +329,177 @@ talk2browser/
 
 ---
 
+## 🔍 Code Quality & Contributing
+
+### Quality Checks Pipeline
+
+This project maintains high code quality through automated checks that run on every pull request. All contributors should run these checks locally before submitting code.
+
+#### Automated CI Pipeline
+
+Our GitHub Actions workflow runs the following quality checks:
+
+- **🧹 Code Linting** (flake8) - Style and syntax checking
+- **🎨 Code Formatting** (black) - Consistent code formatting
+- **🔍 Type Checking** (mypy) - Static type analysis
+- **🧪 Unit Tests** (pytest) - Automated testing
+
+### Running Quality Checks Locally
+
+#### Prerequisites
+
+Make sure you have the development dependencies installed:
+
+```bash
+# Install with development dependencies
+pip install -e .[dev]
+
+# Or install quality tools separately
+pip install black flake8 mypy pytest
+```
+
+#### 1. Code Linting with flake8
+
+**Check for style and syntax issues:**
+```bash
+flake8 src/ tests/
+```
+
+**Common flake8 errors and fixes:**
+
+- **F401 - Unused import**: Remove the unused import
+- **E302 - Missing blank lines**: Add 2 blank lines before top-level functions/classes
+- **W291 - Trailing whitespace**: Remove spaces at end of lines
+- **E304 - Blank line after decorator**: Remove blank line between decorator and function
+
+#### 2. Code Formatting with black
+
+**Check formatting:**
+```bash
+black --check src/ tests/
+```
+
+**Auto-fix formatting:**
+```bash
+black src/ tests/
+```
+
+#### 3. Type Checking with mypy
+
+**Run type checking:**
+```bash
+mypy src/
+```
+
+**Common mypy errors and fixes:**
+
+- **Argument type mismatch**: Use `# type: ignore[arg-type]` for known safe cases
+- **Missing return type**: Add `-> ReturnType` to function signatures
+- **Optional types**: Use `Optional[Type]` or `Type | None` for nullable values
+- **Any return**: Cast with `str(result)` or use `# type: ignore[no-any-return]`
+
+**Example mypy fixes:**
+```python
+# Before (mypy error)
+def process_data(data):
+    return data.upper()
+
+# After (mypy clean)
+def process_data(data: str) -> str:
+    return data.upper()
+
+# For complex cases, use type ignore
+api_key = secret_key.get_secret_value()  # type: ignore[arg-type]
+```
+
+#### 4. Running Tests
+
+**Run all tests:**
+```bash
+pytest
+```
+
+**Run with coverage:**
+```bash
+pytest --cov=src/
+```
+
+### Quick Quality Check Script
+
+Run all quality checks at once:
+
+```bash
+#!/bin/bash
+echo "🧹 Running flake8..."
+flake8 src/ tests/
+
+echo "🎨 Checking black formatting..."
+black --check src/ tests/
+
+echo "🔍 Running mypy..."
+mypy src/
+
+echo "🧪 Running tests..."
+pytest
+
+echo "✅ All quality checks passed!"
+```
+
+Save this as `quality_check.sh` and run with `bash quality_check.sh`.
+
+### Pre-commit Hooks (Recommended)
+
+Install pre-commit hooks to automatically run quality checks:
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install hooks (if .pre-commit-config.yaml exists)
+pre-commit install
+
+# Run on all files
+pre-commit run --all-files
+```
+
+### Fixing Quality Issues
+
+#### Auto-fixable Issues
+
+Some issues can be automatically fixed:
+
+```bash
+# Auto-format code
+black src/ tests/
+
+# Auto-fix some flake8 issues
+autopep8 --in-place --recursive src/ tests/
+```
+
+#### Manual Fixes Required
+
+- **Type annotations**: Add proper type hints
+- **Unused imports**: Remove or use the imports
+- **Complex logic**: Refactor for clarity
+- **Missing docstrings**: Add documentation
+
+### Quality Standards
+
+- **Line length**: Maximum 88 characters (black default)
+- **Type coverage**: All public functions should have type hints
+- **Test coverage**: Aim for >80% code coverage
+- **Documentation**: Public APIs should have docstrings
+
+---
+
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+3. **Run quality checks locally** (see section above)
+4. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+5. Push to the branch (`git push origin feature/AmazingFeature`)
+6. Open a Pull Request
 
 ---
 

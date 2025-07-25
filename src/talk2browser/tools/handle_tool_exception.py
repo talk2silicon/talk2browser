@@ -1,7 +1,14 @@
-import logging
 import traceback
+from typing import Any
 
-async def handle_tool_exception(page, selector, error_msg, logger, screenshot_prefix="error"):
+
+async def handle_tool_exception(
+    page: Any,
+    selector: str,
+    error_msg: str,
+    logger: Any,
+    screenshot_prefix: str = "error",
+) -> str:
     """
     Handle exceptions in browser tools by logging, capturing a screenshot, and standardizing the error response.
 
@@ -20,11 +27,16 @@ async def handle_tool_exception(page, selector, error_msg, logger, screenshot_pr
     screenshot_path = None
     try:
         from pathlib import Path
+
         screenshots_dir = Path("./screenshots")
         screenshots_dir.mkdir(parents=True, exist_ok=True)
         from datetime import datetime
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        screenshot_path = str(screenshots_dir / f"{screenshot_prefix}_{(selector or 'unknown').replace('/', '_').replace(' ', '_')}_{timestamp}.png")
+        screenshot_path = str(
+            screenshots_dir
+            / f"{screenshot_prefix}_{(selector or 'unknown').replace('/', '_').replace(' ', '_')}_{timestamp}.png"
+        )
         await page.screenshot(path=screenshot_path)
         logger.info(f"Screenshot saved to {screenshot_path} for exception.")
     except Exception as screenshot_exc:
