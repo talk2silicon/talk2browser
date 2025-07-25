@@ -91,7 +91,7 @@ def compress_image_to_size_limit(
         # Final size check - if still too large, use extreme measures
         if len(img_bytes) > max_size:
             logger.warning(
-                f"[FileSystemTools] Image still too large ({len(img_bytes)/1024/1024:.2f}MB), using grayscale conversion"
+                f"[FileSystemTools] Image still too large ({len(img_bytes) / 1024.0 / 1024.0:.2f}MB), using grayscale conversion"
             )
             gray_img = img.convert("L")  # Convert to grayscale
             compressed_img = io.BytesIO()

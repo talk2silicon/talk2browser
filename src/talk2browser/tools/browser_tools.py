@@ -1666,9 +1666,9 @@ async def extract_structured_data(
                     f"Content is too long, removing middle {len(cleaned_content) - max_chars} characters"
                 )
                 cleaned_content = (
-                    cleaned_content[:max_chars // 2]
+                    cleaned_content[: max_chars // 2]
                     + "\n... left out the middle because it was too long ...\n"
-                    + cleaned_content[-max_chars // 2:]
+                    + cleaned_content[-max_chars // 2 :]
                 )
                 logger.info(
                     f"[extract_structured_data] After truncation, content length: {len(cleaned_content)} characters"

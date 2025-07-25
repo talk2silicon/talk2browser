@@ -95,7 +95,7 @@ class PlaywrightClient:
                     and attempt < max_retries - 1
                 ):
                     logging.warning(
-                        f"[PlaywrightClient] page.title() failed due to navigation context destruction, retrying ({attempt+1}/{max_retries})..."
+                        f"[PlaywrightClient] page.title() failed due to navigation context destruction, retrying ({attempt + 1} / {max_retries})..."
                     )
                     await asyncio.sleep(0.5)
                     try:
