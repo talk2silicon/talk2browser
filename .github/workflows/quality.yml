@@ -22,7 +22,7 @@ jobs:
           pip install black flake8 mypy pytest
       - name: Install Playwright browsers
         run: |
-          playwright install
+          python -m playwright install
       - name: Lint with flake8
         run: |
           flake8 src/ tests/
