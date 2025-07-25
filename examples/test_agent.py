@@ -57,13 +57,7 @@ TASKS = {
         "Extract descriptions"
         "Extract links"
         "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
-    ),
-    "amazon_bose": (
-        "Go to https://www.amazon.com.au"
-        "Search for 'Bose Smart Ultra Soundbar'. "
-        "Create a comprehensive PDF report with all the extracted information, "
-        "formatted in a clean and readable way with proper headings and sections. "
-    ),
+    )
 }
 
 

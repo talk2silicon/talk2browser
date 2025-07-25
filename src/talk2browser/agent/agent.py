@@ -334,7 +334,7 @@ class BrowserAgent:
             logger.warning(
                 f"Reached maximum tool calls ({MAX_TOOL_CALLS}), ending conversation"
             )
-            return END
+            return str(END)
 
         # Check if the last message has tool calls
         if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
@@ -345,7 +345,7 @@ class BrowserAgent:
         logger.debug(
             "[Agent] _route_tools: No tool calls in last message, ending conversation"
         )
-        return END
+        return str(END)
 
     # --- PageManager integration methods ---
     def create_new_page(self, page_id: str, playwright_page: Any) -> None:
