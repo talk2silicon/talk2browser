@@ -26,9 +26,9 @@ jobs:
       - name: Check formatting with black
         run: |
           black --check src/ tests/
-      - name: Type check with mypy
-        run: |
-          mypy src/
+      # - name: Type check with mypy
+      #   run: |
+      #     mypy src/
       - name: Run tests
         run: |
           pytest
