@@ -54,12 +54,17 @@ venv\Scripts\activate
 git clone https://github.com/talk2silicon/talk2browser.git
 cd talk2browser
 
-# Install Playwright browsers (required for browser automation)
-playwright install
-
-# Install the package in development mode
+# Install the package in development mode (includes all dependencies)
 pip install -e .[dev]
+
+# Install Playwright browsers (required for browser automation)
+python -m playwright install
 ```
+
+**Note for Contributors:** All dependencies are declared in `pyproject.toml`. The `pip install -e .[dev]` command installs:
+- All runtime dependencies (playwright, langchain, etc.)
+- All development dependencies (pytest, mypy, black, flake8)
+- No additional manual pip installs should be needed
 
 ### Step 3: API Key Setup
 
@@ -109,7 +114,7 @@ If successful, you'll see files like:
 **1. "No module named 'playwright'"**
 ```bash
 # Install Playwright browsers
-playwright install
+python -m playwright install
 ```
 
 **2. "Anthropic API key not found"**
@@ -120,7 +125,7 @@ playwright install
 **3. "Browser launch failed"**
 ```bash
 # Reinstall Playwright browsers
-playwright install --force
+python -m playwright install --force
 ```
 
 **4. "Permission denied" on macOS/Linux**
