@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict, Optional
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright, Playwright
 
 
 class PlaywrightClient:
@@ -19,7 +19,7 @@ class PlaywrightClient:
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
-        self.playwright = None
+        self.playwright: Optional[Playwright] = None
 
     async def start(self) -> None:
         """Start the Playwright browser instance with large window and viewport."""
@@ -48,7 +48,7 @@ class PlaywrightClient:
         from .page_manager import PageManager
         from .page import BrowserPage
 
-        def _on_new_page(page):
+        def _on_new_page(page: Page) -> None:
             page_id = str(uuid.uuid4())
             browser_page = BrowserPage(page)
             PageManager.get_instance().add_page(page_id, browser_page)

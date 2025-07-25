@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import Optional, List
+from typing import Optional, List, Any
 from langchain_core.tools import tool
 
 # Use singleton getter everywhere; do not instantiate directly.
@@ -183,11 +183,11 @@ async def replay_action_json_with_playwright(action_json_path: str) -> str:
         return "Error: No active browser page."
     page = browser_page.get_page()
 
-    def resolve_placeholders(val):
+    def resolve_placeholders(val: Any) -> Any:
         if not isinstance(val, str):
             return val
 
-        def repl(match):
+        def repl(match: Any) -> str:
             var = match.group(1)
             env_val = os.environ.get(var)
             if env_val is not None:

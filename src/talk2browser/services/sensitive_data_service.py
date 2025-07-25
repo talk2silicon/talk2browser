@@ -22,7 +22,7 @@ class SensitiveDataService:
         )
 
     @classmethod
-    def get_placeholder_for_value(cls, value: str) -> str | None:
+    def get_placeholder_for_value(cls, value: str) -> Optional[str]:
         """Return the placeholder (e.g. ${MY_SECRET}) if value matches a known secret, else None."""
         if cls._instance is None:
             return None
@@ -61,7 +61,7 @@ class SensitiveDataService:
         return None
 
     @classmethod
-    def configure(cls, secrets: Optional[Dict[str, str]] = None):
+    def configure(cls, secrets: Optional[Dict[str, str]] = None) -> None:
         """Configure the singleton instance with a new secret dict."""
         cls._instance = cls(secrets)
         logger.debug(
@@ -94,7 +94,7 @@ class SensitiveDataService:
         return env_val
 
     @classmethod
-    def clear(cls):
+    def clear(cls) -> None:
         """Clear the singleton instance (for tests or cleanup)."""
         cls._instance = None
         logger.debug("SensitiveDataService cleared.")

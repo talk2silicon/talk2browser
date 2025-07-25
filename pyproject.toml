@@ -39,6 +39,9 @@ dev = [
     "mypy>=1.0.0",
     "flake8>=6.0.0",
     "fpdf",
+    "types-Markdown",
+    "types-fpdf2",
+    "types-toml",
 ]
 
 [project.scripts]
@@ -57,8 +60,12 @@ profile = "black"
 line_length = 88
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+mypy_path = "src"
+packages = ["talk2browser"]
+namespace_packages = true
+explicit_package_bases = true

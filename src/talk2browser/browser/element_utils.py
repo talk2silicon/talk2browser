@@ -18,10 +18,10 @@ class InteractiveElement:
     placeholder: str = ""
     value: str = ""
     selector: str = ""
-    attributes: Dict[str, str] = None
+    attributes: Optional[Dict[str, str]] = None
     is_visible: bool = True
     is_enabled: bool = True
-    bounds: Dict[str, int] = None
+    bounds: Optional[Dict[str, int]] = None
 
 
 async def find_interactive_elements(

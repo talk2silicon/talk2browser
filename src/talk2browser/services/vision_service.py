@@ -9,7 +9,7 @@ class VisionService:
     _instance = None
     _lock = threading.Lock()
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._latest_results = None
         self._latest_image_path = None
         self._model_path = get_vision_model_path()
@@ -19,15 +19,15 @@ class VisionService:
             self._load_model()
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> "VisionService":
         with cls._lock:
             if cls._instance is None:
                 cls._instance = VisionService()
             return cls._instance
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         try:
-            from ultralytics import YOLO
+            from ultralytics import YOLO  # type: ignore
 
             self._logger.info(
                 f"[VisionService] Loading YOLOv11 model from {self._model_path}"
@@ -39,7 +39,7 @@ class VisionService:
 
     def store_screenshot(
         self, image_path: str, metadata: Optional[Dict[str, Any]] = None
-    ):
+    ) -> None:
         """
         Store the latest screenshot path and optional metadata. Overwrites previous.
         """

@@ -8,7 +8,7 @@ and execute browser automation tasks using Playwright.
 import os
 import logging
 
-from typing import Annotated, Sequence, TypedDict, Optional
+from typing import Annotated, Sequence, TypedDict, Optional, Dict, Any, List
 
 from langchain_core.messages import (
     BaseMessage,
@@ -186,8 +186,9 @@ Example:
 class AgentState(TypedDict):
     """State for the browser agent following LangGraph pattern."""
 
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+    messages: Annotated[List[BaseMessage], add_messages]
     next: str  # For LangGraph routing
+    element_map: Dict[str, str]  # Element hash to xpath mapping
     # Optional vision meta-data for LLM context
     vision: dict
 
@@ -200,7 +201,7 @@ class BrowserAgent:
         llm: Optional[ChatAnthropic] = None,
         headless: bool = False,
         info_mode: bool = False,
-        sensitive_data: dict = None,
+        sensitive_data: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the browser agent.
 
@@ -213,20 +214,28 @@ class BrowserAgent:
         self.headless = headless
         self.info_mode = info_mode
         self.sensitive_data = sensitive_data or {}
-        self.story_log = []  # Collects story steps if info_mode is enabled
+        self.story_log: List[str] = []  # Collects story steps if info_mode is enabled
         # Initialize LLM
-        self.llm = llm or ChatAnthropic(
-            model=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
-            temperature=0.0,
-            api_key=os.getenv("ANTHROPIC_API_KEY"),
-        )
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            from pydantic.v1 import SecretStr
+            self.llm = llm or ChatAnthropic(
+                model_name=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
+                temperature=0.0,
+                api_key=SecretStr(api_key),
+                timeout=60.0,
+                stop=None,
+                base_url=None,
+            )
+        else:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
         from .llm_singleton import set_llm
 
         set_llm(self.llm)
 
         # Initialize browser client and DOM service (will be started in __aenter__)
         self.client = PlaywrightClient(headless=headless)
-        self.dom_service = None
+        self.dom_service: Optional[Any] = None
         # ManualModeService fully merged into ActionService; no instance needed.
         # Initialize PageManager (singleton)
         self.page_manager = PageManager.get_instance()
@@ -243,7 +252,7 @@ class BrowserAgent:
             f"Sensitive data keys: {list(self.sensitive_data.keys()) if self.sensitive_data else []}"
         )
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "BrowserAgent":
         """Async context manager entry."""
         try:
             # Start the browser
@@ -276,7 +285,7 @@ class BrowserAgent:
             await self.__aexit__(type(e), e, None)
             raise
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
         if hasattr(self, "client") and self.client:
             try:
@@ -285,7 +294,7 @@ class BrowserAgent:
             except Exception as e:
                 logger.warning("Error closing browser client: %s", str(e))
 
-    def _create_agent_graph(self):
+    def _create_agent_graph(self) -> Any:
         """Create the two-node LangGraph for the agent, using the standard ToolNode."""
         logger.debug(
             "Creating agent graph with standard ToolNode (no custom tool dispatch)"
@@ -305,7 +314,7 @@ class BrowserAgent:
         )
         return self.graph
 
-    def _route_tools(self, state: AgentState):
+    def _route_tools(self, state: AgentState) -> str:
         """Route to tools node if tool calls are present, otherwise end."""
         if not (messages := state.get("messages", [])):
             raise ValueError("No messages found in state")
@@ -337,13 +346,13 @@ class BrowserAgent:
         return END
 
     # --- PageManager integration methods ---
-    def create_new_page(self, page_id: str, playwright_page):
+    def create_new_page(self, page_id: str, playwright_page: Any) -> None:
         """Create and add a new BrowserPage to the PageManager."""
         browser_page = BrowserPage(playwright_page)
         self.page_manager.add_page(page_id, browser_page)
         logger.debug(f"Created and added new BrowserPage with id {page_id}")
 
-    def switch_page(self, page_id: str):
+    def switch_page(self, page_id: str) -> None:
         """Switch to a different BrowserPage by id."""
         page = self.page_manager.switch_to(page_id)
         if page:
@@ -351,7 +360,7 @@ class BrowserAgent:
         else:
             logger.error(f"Failed to switch to BrowserPage with id {page_id}")
 
-    def close_page(self, page_id: str):
+    def close_page(self, page_id: str) -> None:
         """Close and remove a BrowserPage by id."""
         self.page_manager.close_page(page_id)
         logger.debug(f"Closed BrowserPage with id {page_id}")
@@ -471,7 +480,7 @@ class BrowserAgent:
                 from ..services.vision_service import VisionService
                 from ..utils.config import is_vision_enabled
 
-                def format_vision_metadata(image_path, detections):
+                def format_vision_metadata(image_path: str, detections: List[Dict[str, Any]]) -> str:
                     if not detections:
                         return "## Vision UI Element Detections (YOLOv11):\n(No UI elements detected by vision model.)"
                     lines = ["## Vision UI Element Detections (YOLOv11):"]
@@ -502,7 +511,7 @@ class BrowserAgent:
                     for path in screenshots:
                         try:
                             # Add image compression to ensure size is under Claude's 5MB limit
-                            from src.talk2browser.tools.file_system_tools import (
+                            from talk2browser.tools.file_system_tools import (
                                 compress_image_to_size_limit,
                             )
 
@@ -586,7 +595,7 @@ class BrowserAgent:
                     logger.debug(
                         f"[Agent] LLM HumanMessage content blocks: {content_blocks}"
                     )
-                    messages[i] = HumanMessage(content=content_blocks)
+                    messages[i] = HumanMessage(content=content_blocks)  # type: ignore
 
             # Invoke LLM with tools
             response = await llm_with_tools.ainvoke(messages)
@@ -614,7 +623,12 @@ class BrowserAgent:
             if hasattr(response, "tool_calls") and response.tool_calls:
                 logger.info("Tool calls detected in LLM response")
                 # DOM post-processing is now handled by explicit LLM/tool calls, not by the agent.
-                return {"messages": messages + [response], "next": "tools"}
+                return {
+                    "messages": messages + [response], 
+                    "next": "tools",
+                    "element_map": {},
+                    "vision": {}
+                }
 
             # No tool calls, end the conversation
             logger.info("No tool calls in LLM response, ending conversation")
@@ -622,7 +636,12 @@ class BrowserAgent:
                 step = "Step: No further tool actions needed. Conversation ending."
                 print(step)
                 self.story_log.append(step)
-            return {"messages": messages + [response], "next": END}
+            return {
+                "messages": messages + [response], 
+                "next": END,
+                "element_map": {},
+                "vision": {}
+            }
 
         except Exception as e:
             error_msg = f"Error in chatbot: {str(e)}"
@@ -630,9 +649,11 @@ class BrowserAgent:
             return {
                 "messages": messages + [SystemMessage(content=error_msg)],
                 "next": END,
+                "element_map": {},
+                "vision": {}
             }
 
-    async def run(self, task: str, sensitive_data: dict = None) -> str:
+    async def run(self, task: str, sensitive_data: Optional[Dict[str, Any]] = None) -> str:
         """Run the agent with the given task.
 
         Args:
@@ -655,7 +676,10 @@ class BrowserAgent:
             )
             # Initialize state
             initial_state = AgentState(
-                messages=[HumanMessage(content=task)], next="agent"
+                messages=[HumanMessage(content=task)], 
+                next="agent",
+                element_map={},
+                vision={}
             )
             logger.info(f"Starting agent with task: {task}")
             result = await self.graph.ainvoke(

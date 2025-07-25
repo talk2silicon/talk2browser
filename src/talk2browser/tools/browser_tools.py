@@ -1427,7 +1427,7 @@ def generate_pdf_from_html(html: str, path: str = None, options: dict = None) ->
                 ]
                 if screenshot_paths:
                     try:
-                        from PyPDF2 import PdfReader, PdfWriter
+                        from PyPDF2 import PdfReader, PdfWriter  # type: ignore
                         from fpdf import FPDF
                         from PIL import Image
 
@@ -1550,7 +1550,7 @@ async def extract_structured_data(
         logger.info("[extract_structured_data] Page load state: networkidle reached")
 
         try:
-            import markdownify
+            import markdownify  # type: ignore
 
             strip = []
             if not extract_links:

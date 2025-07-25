@@ -4,7 +4,7 @@ import re
 from talk2browser.services.sensitive_data_service import SensitiveDataService
 
 
-def resolve_secret_placeholders(value):
+def resolve_secret_placeholders(value: Any) -> Any:
     """
     Resolves secret placeholders in a string using SensitiveDataService.
     Only resolves if value matches ${VAR}. Otherwise, returns as-is.

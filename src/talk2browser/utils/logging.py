@@ -18,7 +18,7 @@ class ColoredFormatter(logging.Formatter):
         "RESET": "\033[0m",  # Reset to default
     }
 
-    def format(self, record):
+    def format(self, record: Any) -> str:
         # Get the original format
         log_fmt = self._style._fmt
 
