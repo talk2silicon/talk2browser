@@ -3,7 +3,11 @@ from typing import Any
 
 
 async def handle_tool_exception(
-    page: Any, selector: str, error_msg: str, logger: Any, screenshot_prefix: str = "error"
+    page: Any,
+    selector: str,
+    error_msg: str,
+    logger: Any,
+    screenshot_prefix: str = "error",
 ) -> str:
     """
     Handle exceptions in browser tools by logging, capturing a screenshot, and standardizing the error response.

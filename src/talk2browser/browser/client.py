@@ -3,7 +3,13 @@
 import logging
 from typing import Any, Dict, Optional
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright, Playwright
+from playwright.async_api import (
+    Browser,
+    BrowserContext,
+    Page,
+    async_playwright,
+    Playwright,
+)
 
 
 class PlaywrightClient:

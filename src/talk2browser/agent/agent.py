@@ -219,6 +219,7 @@ class BrowserAgent:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
             from pydantic.v1 import SecretStr
+
             secret_api_key = SecretStr(api_key)
             self.llm = llm or ChatAnthropic(
                 model_name=os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307"),
@@ -481,7 +482,9 @@ class BrowserAgent:
                 from ..services.vision_service import VisionService
                 from ..utils.config import is_vision_enabled
 
-                def format_vision_metadata(image_path: str, detections: List[Dict[str, Any]]) -> str:
+                def format_vision_metadata(
+                    image_path: str, detections: List[Dict[str, Any]]
+                ) -> str:
                     if not detections:
                         return "## Vision UI Element Detections (YOLOv11):\n(No UI elements detected by vision model.)"
                     lines = ["## Vision UI Element Detections (YOLOv11):"]
@@ -629,7 +632,7 @@ class BrowserAgent:
                     "messages": messages + [response],
                     "next": "tools",
                     "element_map": {},
-                    "vision": {}
+                    "vision": {},
                 }
 
             # No tool calls, end the conversation
@@ -642,7 +645,7 @@ class BrowserAgent:
                 "messages": messages + [response],
                 "next": END,
                 "element_map": {},
-                "vision": {}
+                "vision": {},
             }
 
         except Exception as e:
@@ -652,10 +655,12 @@ class BrowserAgent:
                 "messages": messages + [SystemMessage(content=error_msg)],
                 "next": END,
                 "element_map": {},
-                "vision": {}
+                "vision": {},
             }
 
-    async def run(self, task: str, sensitive_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(
+        self, task: str, sensitive_data: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Run the agent with the given task.
 
         Args:
@@ -681,7 +686,7 @@ class BrowserAgent:
                 messages=[HumanMessage(content=task)],
                 next="agent",
                 element_map={},
-                vision={}
+                vision={},
             )
             logger.info(f"Starting agent with task: {task}")
             result = await self.graph.ainvoke(

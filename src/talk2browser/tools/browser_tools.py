@@ -242,7 +242,9 @@ async def is_enabled(selector: str, **kwargs: Any) -> bool:
 
 @tool
 @resolve_hash_args
-async def resolve_selector(selector: str, dom_service: Any, logger: Any) -> Optional[str]:
+async def resolve_selector(
+    selector: str, dom_service: Any, logger: Any
+) -> Optional[str]:
     """
     Resolves a hash selector to an XPath selector using DOMService if needed.
     Returns a valid Playwright selector (xpath=...), or the original if not a hash.
@@ -278,6 +280,7 @@ async def get_logger() -> Any:
 async def get_page_manager() -> Any:
     """Return the PageManager instance."""
     from ..browser.page_manager import PageManager
+
     return PageManager.get_instance()
 
 
@@ -286,6 +289,7 @@ async def get_page_manager() -> Any:
 async def get_current_page() -> Any:
     """Return the current browser page."""
     from ..browser.page_manager import PageManager
+
     return PageManager.get_instance().get_current_page()
 
 
@@ -294,6 +298,7 @@ async def get_current_page() -> Any:
 async def get_dom_service() -> Any:
     """Return the DOMService instance."""
     from ..browser.page_manager import PageManager
+
     browser_page = PageManager.get_instance().get_current_page()
     return browser_page.get_dom_service() if browser_page else None
 
@@ -302,11 +307,11 @@ async def get_dom_service() -> Any:
 @resolve_hash_args
 async def get_count(selector: str, **kwargs: Any) -> int:
     """Return the number of elements matching the selector on the current browser page.
-    Args:
-        selector: CSS selector
-    Returns:
-        int: Number of elements found
-{{ ... }}
+        Args:
+            selector: CSS selector
+        Returns:
+            int: Number of elements found
+    {{ ... }}
     """
     import logging
 
@@ -399,7 +404,9 @@ async def navigate(url: str) -> str:
 
 @tool
 @resolve_hash_args
-async def click(selector: str, *, timeout: int = 5000, element_map: Optional[dict] = None) -> str:
+async def click(
+    selector: str, *, timeout: int = 5000, element_map: Optional[dict] = None
+) -> str:
     """Click on an element matching the CSS selector on the current browser page.
     Args:
         selector: CSS selector of the element to click
@@ -958,9 +965,9 @@ async def hover(selector: str, **kwargs: Any) -> str:
 @resolve_hash_args
 async def wait_for_selector(
     selector: str,
-    state: Optional[Literal['attached', 'detached', 'hidden', 'visible']] = 'visible',
+    state: Optional[Literal["attached", "detached", "hidden", "visible"]] = "visible",
     timeout: int = 5000,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> str:
     """Wait for a selector to reach a certain state (visible, attached, detached, hidden)."""
     logger = logging.getLogger(__name__)
@@ -1013,7 +1020,9 @@ async def wait_for_selector(
 
 
 @tool
-async def screenshot(selector: Optional[str] = None, path: Optional[str] = None, **kwargs: Any) -> str:
+async def screenshot(
+    selector: Optional[str] = None, path: Optional[str] = None, **kwargs: Any
+) -> str:
     """Take a screenshot of the current page or a specific element. If selector is None, capture the full page."""
     logger = logging.getLogger(__name__)
     from ..browser.page_manager import PageManager
@@ -1196,7 +1205,9 @@ async def list_suggestions(
 
 # --- LLM Tool: Generate PDF from HTML ---
 @tool
-def generate_pdf_from_html(html: str, path: Optional[str] = None, options: Optional[dict] = None) -> str:
+def generate_pdf_from_html(
+    html: str, path: Optional[str] = None, options: Optional[dict] = None
+) -> str:
     """
     Generate a high-quality PDF from HTML content using Playwright with enhanced formatting.
 
@@ -1474,7 +1485,7 @@ def generate_pdf_from_html(html: str, path: Optional[str] = None, options: Optio
                         writer = PdfWriter()
                         reader = PdfReader(output_path)
                         # Add original PDF pages
-                        for page in reader.pages:
+                        for page in reader.pages:  # type: ignore[assignment]
                             writer.add_page(page)  # type: ignore[arg-type]
                         # Create a PDF for each screenshot and append
                         for idx, img_path in enumerate(screenshot_paths):
@@ -1502,7 +1513,7 @@ def generate_pdf_from_html(html: str, path: Optional[str] = None, options: Optio
                         # Append screenshot PDFs
                         for temp_pdf in temp_pdf_paths:
                             img_reader = PdfReader(temp_pdf)
-                            for page in img_reader.pages:
+                            for page in img_reader.pages:  # type: ignore[assignment]
                                 writer.add_page(page)  # type: ignore[arg-type]
                             logger.info(
                                 f"[generate_pdf_from_html] Appending screenshot PDF: {temp_pdf}"

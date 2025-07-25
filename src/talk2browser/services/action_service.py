@@ -147,7 +147,9 @@ class ActionService:
         )
         await page.expose_function("notifyPythonOfModeChange", self.handle_mode_change)
 
-    def handle_mode_change(self, is_manual: bool, page: typing.Any = None, timeout_seconds: int = 120) -> None:
+    def handle_mode_change(
+        self, is_manual: bool, page: typing.Any = None, timeout_seconds: int = 120
+    ) -> None:
         """
         Called by Playwright/JS when the user toggles manual/agent mode.
         Optionally starts a timeout monitor if entering manual mode.
@@ -169,7 +171,9 @@ class ActionService:
             if self._timeout_task and not self._timeout_task.done():
                 self._timeout_task.cancel()
 
-    async def _manual_mode_timeout_monitor(self, page: typing.Any, timeout_seconds: int) -> None:
+    async def _manual_mode_timeout_monitor(
+        self, page: typing.Any, timeout_seconds: int
+    ) -> None:
         try:
             while self._manual_mode:
                 try:
@@ -194,7 +198,9 @@ class ActionService:
     def is_manual_mode(self) -> bool:
         return self._manual_mode
 
-    async def fetch_manual_actions_from_browser(self, page: typing.Any) -> list[dict[str, Any]]:
+    async def fetch_manual_actions_from_browser(
+        self, page: typing.Any
+    ) -> list[dict[str, Any]]:
         # page: Playwright.Page (dynamic import)
         # returns: List[Dict[str, Any]]
         logger.info("Fetching manual actions from browser...")
