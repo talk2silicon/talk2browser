@@ -20,6 +20,10 @@ test-results/
 *.swo
 *~
 
+# macOS
+.DS_Store
+.DS_Store?
+
 # Logs
 *.log
 
@@ -232,4 +236,5 @@ references/
 src/talk2browser/services/__pycache__/
 .windsurf/
 __pycache__/
-wip.md.DS_Store
+wip.md
+.DS_Store
