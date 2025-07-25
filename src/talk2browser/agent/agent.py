@@ -8,7 +8,7 @@ and execute browser automation tasks using Playwright.
 import os
 import logging
 
-from typing import Annotated, Sequence, TypedDict, Optional, Dict, Any, List
+from typing import Annotated, TypedDict, Optional, Dict, Any, List
 
 from langchain_core.messages import (
     BaseMessage,
@@ -626,7 +626,7 @@ class BrowserAgent:
                 logger.info("Tool calls detected in LLM response")
                 # DOM post-processing is now handled by explicit LLM/tool calls, not by the agent.
                 return {
-                    "messages": messages + [response], 
+                    "messages": messages + [response],
                     "next": "tools",
                     "element_map": {},
                     "vision": {}
@@ -639,7 +639,7 @@ class BrowserAgent:
                 print(step)
                 self.story_log.append(step)
             return {
-                "messages": messages + [response], 
+                "messages": messages + [response],
                 "next": END,
                 "element_map": {},
                 "vision": {}
@@ -678,7 +678,7 @@ class BrowserAgent:
             )
             # Initialize state
             initial_state = AgentState(
-                messages=[HumanMessage(content=task)], 
+                messages=[HumanMessage(content=task)],
                 next="agent",
                 element_map={},
                 vision={}

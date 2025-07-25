@@ -14,6 +14,7 @@ import functools
 # --- Selector Normalization Utility ---
 from typing import Any
 
+
 def normalize_selector(selector: str, logger: Any = None) -> str:
     """
     Normalize selectors for Playwright compatibility:
@@ -955,7 +956,6 @@ async def hover(selector: str, **kwargs: Any) -> str:
 
 @tool
 @resolve_hash_args
-
 async def wait_for_selector(
     selector: str,
     state: Optional[Literal['attached', 'detached', 'hidden', 'visible']] = 'visible',
@@ -1469,7 +1469,6 @@ def generate_pdf_from_html(html: str, path: Optional[str] = None, options: Optio
                         from PyPDF2 import PdfReader, PdfWriter  # type: ignore
                         from fpdf import FPDF
                         from PIL import Image
-                        from PyPDF2._page import PageObject
 
                         temp_pdf_paths = []
                         writer = PdfWriter()
