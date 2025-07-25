@@ -125,7 +125,7 @@ class ScriptGenerationService:
                     # Optionally raise an error here if strictness is desired
 
             if output_path is None:
-                safe_task = re.sub(r'[^a-zA-Z0-9_-]', '_', task.lower())[:40]
+                safe_task = re.sub(r"[^a-zA-Z0-9_-]", "_", task.lower())[:40]
                 output_path = str(Path("./generated") / f"playwright_{safe_task}.{ext}")
             from ..tools.file_system_tools import save_text_to_file
 
@@ -207,7 +207,7 @@ class ScriptGenerationService:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
             if output_path is None:
-                safe_task = re.sub(r'[^a-zA-Z0-9_-]', '_', task.lower())[:40]
+                safe_task = re.sub(r"[^a-zA-Z0-9_-]", "_", task.lower())[:40]
                 output_path = str(Path("./generated") / f"cypress_{safe_task}.cy.js")
             from ..tools.file_system_tools import save_text_to_file
 
@@ -288,7 +288,7 @@ class ScriptGenerationService:
                 self.logger.error("[ScriptGen] LLM returned no script content.")
                 raise ValueError("LLM returned no script content.")
             if output_path is None:
-                safe_task = re.sub(r'[^a-zA-Z0-9_-]', '_', task.lower())[:40]
+                safe_task = re.sub(r"[^a-zA-Z0-9_-]", "_", task.lower())[:40]
                 output_path = str(Path("./generated") / f"selenium_{safe_task}.py")
             from ..tools.file_system_tools import save_text_to_file
 

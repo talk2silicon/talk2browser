@@ -1,4 +1,5 @@
 """Test script for the BrowserAgent with Sauce Demo login example."""
+
 import asyncio
 import logging
 import os
@@ -7,14 +8,18 @@ from dotenv import load_dotenv
 from talk2browser.utils.logging import setup_logging
 import pathlib
 
+
 # Ensure logs directory exists
 def ensure_log_dir():
-    log_dir = pathlib.Path('logs')
+    log_dir = pathlib.Path("logs")
     log_dir.mkdir(exist_ok=True)
-    return log_dir / 'agent.log'
+    return log_dir / "agent.log"
+
 
 from talk2browser.agent.agent import BrowserAgent
-from talk2browser.services.sensitive_data_service import SensitiveDataService  # <-- Added import
+from talk2browser.services.sensitive_data_service import (
+    SensitiveDataService,
+)  # <-- Added import
 
 # Load environment variables from .env
 load_dotenv()
@@ -44,7 +49,6 @@ TASKS = {
         "Go to https://github.com/trending. "
         "Extract information about the repositories"
         "Create a comprehensive PDF report with all the extracted information, formatted in a clean and readable way."
-        
     ),
     "tiktok_trending": (
         "Go to https://www.tiktok.com/channel/trending-now?lang=en. "
@@ -59,25 +63,32 @@ TASKS = {
         "Search for 'Bose Smart Ultra Soundbar'. "
         "Create a comprehensive PDF report with all the extracted information, "
         "formatted in a clean and readable way with proper headings and sections. "
-    )
+    ),
 }
+
 
 def get_selected_task():
     parser = argparse.ArgumentParser()
     # Default task is filedata to demonstrate file-based test data loading
-    parser.add_argument("--task", choices=TASKS.keys(), default="filedata", help="Task to run (default: filedata)")
+    parser.add_argument(
+        "--task",
+        choices=TASKS.keys(),
+        default="filedata",
+        help="Task to run (default: filedata)",
+    )
     args = parser.parse_args()
     return TASKS[args.task].strip()
+
 
 async def main():
     """Test the BrowserAgent with a Sauce Demo login flow."""
     # Configure more detailed logging
     logging.getLogger("talk2browser").setLevel(logging.INFO)
-    
+
     # Check for required API key
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise ValueError("ANTHROPIC_API_KEY environment variable is required")
-    
+
     task = get_selected_task()
     task_name = task.split()[0]
     print(f"[test_agent.py] Running task: {task}")
@@ -87,20 +98,24 @@ async def main():
         async with BrowserAgent(headless=False) as agent:
             sensitive_data = {
                 "company_username": os.getenv("COMPANY_USERNAME", "standard_user"),
-                "company_password": os.getenv("COMPANY_PASSWORD", "secret_sauce")
+                "company_password": os.getenv("COMPANY_PASSWORD", "secret_sauce"),
             }
-            print(f"[test_agent.py] Injecting sensitive_data keys: {list(sensitive_data.keys())}")
+            print(
+                f"[test_agent.py] Injecting sensitive_data keys: {list(sensitive_data.keys())}"
+            )
             response = await agent.run(task, sensitive_data=sensitive_data)
             print("\nAgent response:")
             print(response)
-            print("="*80)
+            print("=" * 80)
             print("TEST COMPLETED!")
-            print("="*80)
+            print("=" * 80)
     except Exception as e:
         print(f"\nError during test execution: {str(e)}")
         import traceback
+
         traceback.print_exc()
         raise
+
 
 if __name__ == "__main__":
     asyncio.run(main())

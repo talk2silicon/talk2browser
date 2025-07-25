@@ -581,7 +581,9 @@ async def fill(selector: str, text: str, **kwargs) -> str:
                 or selector.startswith("//")
             ):
                 std_selector = (
-                    f"xpath={selector}" if not selector.startswith("xpath=") else selector
+                    f"xpath={selector}"
+                    if not selector.startswith("xpath=")
+                    else selector
                 )
                 selector_type = "xpath"
             else:
@@ -1666,7 +1668,7 @@ async def extract_structured_data(
                 cleaned_content = (
                     cleaned_content[:max_chars // 2]
                     + "\n... left out the middle because it was too long ...\n"
-                    + cleaned_content[-max_chars // 2 :]
+                    + cleaned_content[-max_chars // 2:]
                 )
                 logger.info(
                     f"[extract_structured_data] After truncation, content length: {len(cleaned_content)} characters"

@@ -89,7 +89,7 @@ async def find_interactive_elements(
                 element = await _get_element_properties(handle, selector)
                 if element:
                     logger.debug(
-                        f"[find_interactive_elements] Detected element: tag={element['tag']}, text='{element['text']}', selector='{selector}', attributes={element.get('attributes', {}) }"
+                        f"[find_interactive_elements] Detected element: tag={element['tag']}, text='{element['text']}', selector='{selector}', attributes={element.get('attributes', {})}"
                     )
                     elements.append(element)
         except Exception:
@@ -106,7 +106,9 @@ async def _get_element_properties(
     try:
         # Get basic properties
         tag_name_handle = await handle.get_property("tagName")
-        tag_name = (await tag_name_handle.json_value()).lower() if tag_name_handle else ""
+        tag_name = (
+            (await tag_name_handle.json_value()).lower() if tag_name_handle else ""
+        )
         text_content = (await handle.text_content() or "").strip()
 
         # Heuristic: Don't skip if pointer cursor, clickable class, or data-action/link/click present
