@@ -91,7 +91,7 @@ Test your setup with a simple example:
 
 ```bash
 # Run the GitHub trending example
-python examples/test_agent.py --task github_trending
+python examples/simple_agent.py --task github_trending
 ```
 
 **Expected output:**
